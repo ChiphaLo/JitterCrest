@@ -1,0 +1,16 @@
+{
+  "name": "browser-speedtest-reference",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Browser network quality speed test service",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/server-regressions.test.js test/webrtc-contracts.test.js test/rtc-werift-dcep.test.mjs"
+  },
+  "dependencies": {
+    "werift": "0.23.0"
+  },
+  "license": "MIT"
+}

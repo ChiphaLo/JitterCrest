@@ -1,0 +1,17 @@
+# Replace with a domain you control and a trusted certificate configuration.
+speed.example.com {
+    @speed path /download /download-stream /download-100k /upload /upload-stream
+    handle @speed {
+        reverse_proxy 127.0.0.1:3010 {
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+        }
+    }
+    handle {
+        encode gzip
+        reverse_proxy 127.0.0.1:3010 {
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+        }
+    }
+}

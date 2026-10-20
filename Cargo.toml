@@ -1,0 +1,46 @@
+[package]
+name = "speedtest-rust"
+version = "0.1.0"
+description = "Self-hosted browser speedtest and WebRTC network-quality service"
+license = "MIT"
+repository = "https://github.com/ChiphaLo/speedtest-rust"
+readme = "README.md"
+edition = "2024"
+rust-version = "1.96"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1"
+async-stream = "0.3"
+base64 = "0.22"
+axum = { version = "0.8", features = ["http1", "tokio"] }
+bytes = "1"
+futures-util = "0.3"
+http-body = "1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+getrandom = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tower = { version = "0.5", features = ["util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+webrtc = "=0.17.1"
+# 0.17.2 added a required Config::mtu field before webrtc 0.17.1 adopted it.
+webrtc-sctp = "=0.17.1"
+
+[patch.crates-io]
+# Local fork fixes bundled FORWARD-TSN parsing and preserves the installed
+# Node/Werift sender's zero-Rexmit, fast-recovery and miss-counter behavior:
+# retransmissions restart the miss counter so a lost fast retransmission can
+# be re-armed by later gap SACKs instead of waiting for the T3 timer. See the
+# migration document. Remaining release gates are deployment/rollback and
+# long-duration resource ones, not the browser loss tail.
+webrtc-sctp = { path = "vendor/webrtc-sctp-0.17.1" }
+
+[profile.release]
+lto = "thin"
+

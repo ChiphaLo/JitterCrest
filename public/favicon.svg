@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Speed Test</title>
+  <rect width="64" height="64" rx="15" fill="#0b1428"/>
+  <path d="M14 44a23 23 0 1 1 36 0" fill="none" stroke="#176bfa" stroke-width="7" stroke-linecap="round"/>
+  <path d="M32 7a23 23 0 0 1 23 23" fill="none" stroke="#20d9ef" stroke-width="7" stroke-linecap="round"/>
+  <path d="M28 32 46 18 36 38Z" fill="#fff"/>
+  <circle cx="32" cy="35" r="6" fill="#fff"/>
+  <path d="M25 52h14" stroke="#20d9ef" stroke-width="4" stroke-linecap="round"/>
+</svg>
