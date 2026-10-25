@@ -155,8 +155,10 @@ cleanup/executor failures and requires clean bounded process exits.
   HTTP/TLS and actual UI Restart/RTT tests pass (see `staging.md`); separate
   central-UI-to-agent TLS and public deployment are not yet validated.
 - Reproducible staging bundle and complete dependency/toolchain manifest.
-- Fair alternating Release Rust/C++ CPU/RSS/throughput/tail/concurrency and
-  long-running benchmarks; no performance superiority or replacement verdict.
+- Local alternating Release/ThinLTO core and HTTP benchmarks, CPU/RSS/tails,
+  accepted connections and five-minute mixed traffic are now measured in
+  `local-performance.md` / `performance-analysis.md`. Real-network and longer
+  stability measurements remain open; no production replacement is justified.
 
 Do not enable the experimental RTC service as a production replacement merely
 because a subset of compatibility tests passes.
@@ -182,6 +184,6 @@ After both the stored-callback and association-state corrections:
 | Fresh pinned dependency bootstrap | Passed; idempotent rerun passed | Both the complete usrsctp and stored-callback diffs match their source patches |
 
 These results establish scoped functional and safety progress. They do **not**
-replace the remaining resource/agent/probe-only/static-analysis matrix or fair
-benchmarks, and do not authorize a production cutover. System OpenSSL/libcurl
+replace the remaining resource/agent/probe-only/static-analysis matrix or
+real-network benchmarks, and do not authorize a production cutover. System OpenSSL/libcurl
 are not claimed fully source-instrumented by the transport sanitizer builds.

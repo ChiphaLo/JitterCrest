@@ -19,6 +19,14 @@ as a production backend. See `docs/rtc-validation.md` for current RTC evidence,
 and outstanding safety gates; `docs/core-validation.md` is the earlier core
 snapshot, not an all-current-source safety claim.
 
+Local Release/ThinLTO performance measurements are now available in
+`docs/local-performance.md`, with interpretation in `docs/performance-analysis.md`
+and reproducible commands in `benchmarks/README.md`. They cover five native-core
+rounds, three HTTP rounds and five minutes of mixed traffic per backend. Rust
+leads most measured payload throughput cases; C++ has some lightweight-request
+and high-concurrency RSS advantages. These are local results, not Internet
+measurements or evidence authorizing a production replacement.
+
 ## Architecture and boundaries
 
 - C++20 pure core: owned 128-byte little-endian frames, UTF-16-compatible ID hash,
@@ -185,9 +193,10 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
    service; malicious/slow/half-close/disconnect/reconnect/concurrency cases.
 4. Shared Rust/C++ offline and HTTP/browser contracts, including UI/agent and
    probe-only deployment behavior with explicit environment configuration.
-5. Multi-round alternating Release benchmarks: throughput, CPU, idle/peak RSS,
-   P50/P95/P99, concurrency, sustained stability and errors; separate computation,
-   loopback HTTP and network results. No performance conclusion exists yet.
+5. Local multi-round Release/ThinLTO computation and HTTP benchmarks, CPU/RSS,
+   P50/P95/P99, accepted connections and five-minute stability are measured in
+   the reports above. Real-network end-to-end performance and longer-running
+   stability remain unmeasured; local observations do not establish either.
 6. Independent systemd/Caddy templates are provided in `deploy/`, with their
    isolation/rollback design in `docs/staging.md`. Live staging, Caddy validation,
    reproducible complete deployment bundle, measured reports and final verdict
