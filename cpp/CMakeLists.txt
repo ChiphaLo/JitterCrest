@@ -12,10 +12,15 @@ find_package(Boost 1.83 REQUIRED COMPONENTS system)
 find_package(Threads REQUIRED)
 find_package(CURL 7.85 REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(LibDataChannel 0.24.6 EXACT CONFIG REQUIRED)
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prepare_boost.py"
+  --include "${Boost_INCLUDE_DIRS}" --output "${CMAKE_CURRENT_BINARY_DIR}/boost-overlay"
+  COMMAND_ERROR_IS_FATAL ANY)
 option(SPEEDTEST_WEB_UI "Embed the shared frontend (OFF builds an agent)" ON)
-add_library(speedtest_core src/core.cpp src/control.cpp src/sdp.cpp src/config.cpp src/limits.cpp src/progress.cpp)
-target_include_directories(speedtest_core PUBLIC include)
+add_library(speedtest_core src/core.cpp src/control.cpp src/sdp.cpp src/config.cpp src/limits.cpp src/progress.cpp src/rtc_validation.cpp)
+target_include_directories(speedtest_core BEFORE PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/boost-overlay" include)
 target_link_libraries(speedtest_core PUBLIC nlohmann_json::nlohmann_json Boost::system OpenSSL::Crypto Threads::Threads)
+target_compile_definitions(speedtest_core PUBLIC BOOST_ASIO_HAS_CO_AWAIT BOOST_ASIO_HAS_STD_COROUTINE)
 target_compile_options(speedtest_core PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Werror)
 if(SPEEDTEST_SANITIZER STREQUAL "address-undefined")
   set(SANITIZER_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -61,6 +66,12 @@ add_test(NAME raii_limits_concurrency COMMAND speedtest-limits-test)
 add_executable(speedtest-progress-test tests/progress_test.cpp)
 target_link_libraries(speedtest-progress-test PRIVATE speedtest_core)
 add_test(NAME upload_progress_lifecycle COMMAND speedtest-progress-test)
+add_executable(speedtest-rtc-validation-test tests/rtc_validation_test.cpp)
+target_link_libraries(speedtest-rtc-validation-test PRIVATE speedtest_core)
+add_test(NAME rtc_upload_complete_reasons COMMAND speedtest-rtc-validation-test)
+add_executable(speedtest-executor-refcount-test tests/executor_refcount_test.cpp)
+target_link_libraries(speedtest-executor-refcount-test PRIVATE speedtest_core)
+add_test(NAME asio_executor_refcount_release COMMAND speedtest-executor-refcount-test)
 
 set(SHARED_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/../public" CACHE PATH "Unmodified shared frontend")
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"
@@ -69,8 +80,8 @@ add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"
     --web-ui "${SPEEDTEST_WEB_UI}"
   DEPENDS cmake/embed_assets.py "${SHARED_ASSETS}/index.html" "${SHARED_ASSETS}/favicon.svg"
   VERBATIM)
-add_library(speedtest_http src/client_info.cpp src/http.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
-target_link_libraries(speedtest_http PUBLIC speedtest_core CURL::libcurl)
+add_library(speedtest_http src/client_info.cpp src/http.cpp src/rtc.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
+target_link_libraries(speedtest_http PUBLIC speedtest_core CURL::libcurl LibDataChannel::LibDataChannel)
 # Boost 1.83's Clang detection predates Clang 18's C++20 coroutine macros.
 target_compile_definitions(speedtest_http PUBLIC BOOST_ASIO_HAS_CO_AWAIT BOOST_ASIO_HAS_STD_COROUTINE)
 target_compile_options(speedtest_http PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Werror)

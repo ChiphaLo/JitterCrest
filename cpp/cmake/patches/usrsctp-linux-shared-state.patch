@@ -1,0 +1,518 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c3467f2..070f98a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -200,7 +200,7 @@ if (C_COMPILER_IS_MSVC_LIKE)
+ 	endif ()
+ # SETTINGS FOR UNIX COMPILER
+ elseif (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "AppleClang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
+-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -pedantic -Wall -Wextra")
++	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -pedantic -Wall -Wextra")
+ 
+ 	check_c_compiler_flag(-Wfloat-equal has_wfloat_equal)
+ 	if (has_wfloat_equal)
+diff --git a/usrsctplib/netinet/sctp_callout.h b/usrsctplib/netinet/sctp_callout.h
+index 2a78e41..864e1d4 100755
+--- a/usrsctplib/netinet/sctp_callout.h
++++ b/usrsctplib/netinet/sctp_callout.h
+@@ -75,7 +75,12 @@ struct sctp_callout {
+ 	uint32_t c_time;		/* ticks to the event */
+ 	void *c_arg;		/* function argument */
+ 	void (*c_func)(void *);	/* function to call */
++#if defined(__Userspace__) && defined(__linux__)
++	/* Timer queue updates race with pending/active queries under other locks. */
++	_Atomic int c_flags;
++#else
+ 	int c_flags;		/* state of this entry */
++#endif
+ };
+ typedef struct sctp_callout sctp_os_timer_t;
+ 
+diff --git a/usrsctplib/netinet/sctp_indata.c b/usrsctplib/netinet/sctp_indata.c
+index 115ec1d..6802f36 100755
+--- a/usrsctplib/netinet/sctp_indata.c
++++ b/usrsctplib/netinet/sctp_indata.c
+@@ -95,7 +95,7 @@ sctp_calc_rwnd(struct sctp_tcb *stcb, struct sctp_association *asoc)
+ 	        ("size_on_reasm_queue is %u", asoc->size_on_reasm_queue));
+ 	KASSERT(asoc->cnt_on_all_streams > 0 || asoc->size_on_all_streams == 0,
+ 	        ("size_on_all_streams is %u", asoc->size_on_all_streams));
+-	if (stcb->asoc.sb_cc == 0 &&
++	if (atomic_fetchadd_int(&stcb->asoc.sb_cc, 0) == 0 &&
+ 	    asoc->cnt_on_reasm_queue == 0 &&
+ 	    asoc->cnt_on_all_streams == 0) {
+ 		/* Full rwnd granted */
+@@ -118,11 +118,12 @@ sctp_calc_rwnd(struct sctp_tcb *stcb, struct sctp_association *asoc)
+ 	}
+ 
+ 	/* what is the overhead of all these rwnd's */
+-	calc = sctp_sbspace_sub(calc, stcb->asoc.my_rwnd_control_len);
++	const uint32_t control_overhead = atomic_fetchadd_int(&stcb->asoc.my_rwnd_control_len, 0);
++	calc = sctp_sbspace_sub(calc, control_overhead);
+ 	/* If the window gets too small due to ctrl-stuff, reduce it
+ 	 * to 1, even it is 0. SWS engaged
+ 	 */
+-	if (calc < stcb->asoc.my_rwnd_control_len) {
++	if (calc < control_overhead) {
+ 		calc = 1;
+ 	}
+ 	return (calc);
+@@ -1844,7 +1845,7 @@ sctp_process_a_data_chunk(struct sctp_tcb *stcb, struct sctp_association *asoc,
+ 		}
+ 		if (tsn == (asoc->cumulative_tsn + 1)) {
+ 			/* Update cum-ack */
+-			asoc->cumulative_tsn = tsn;
++			SCTP_CUMTSN_STORE(asoc, tsn);
+ 		}
+ 		return (0);
+ 	}
+@@ -2282,7 +2283,7 @@ finish_express_del:
+ 	/* Here we tidy up things */
+ 	if (tsn == (asoc->cumulative_tsn + 1)) {
+ 		/* Update cum-ack */
+-		asoc->cumulative_tsn = tsn;
++		SCTP_CUMTSN_STORE(asoc, tsn);
+ 	}
+ 	if (last_chunk) {
+ 		*m = NULL;
+@@ -2438,7 +2439,7 @@ sctp_slide_mapping_arrays(struct sctp_tcb *stcb)
+ 			break;
+ 		}
+ 	}
+-	asoc->cumulative_tsn = asoc->mapping_array_base_tsn + (at-1);
++	SCTP_CUMTSN_STORE(asoc, asoc->mapping_array_base_tsn + (at-1));
+ 
+ 	if (SCTP_TSN_GT(asoc->cumulative_tsn, asoc->highest_tsn_inside_map) &&
+             SCTP_TSN_GT(asoc->cumulative_tsn, asoc->highest_tsn_inside_nr_map)) {
+@@ -5589,7 +5590,7 @@ sctp_handle_forward_tsn(struct sctp_tcb *stcb,
+ 	 * gap
+ 	 */
+ 	SCTP_CALC_TSN_TO_GAP(gap, new_cum_tsn, asoc->mapping_array_base_tsn);
+-	asoc->cumulative_tsn = new_cum_tsn;
++	SCTP_CUMTSN_STORE(asoc, new_cum_tsn);
+ 	if (gap >= m_size) {
+ 		if ((long)gap > sctp_sbspace(&stcb->asoc, &stcb->sctp_socket->so_rcv)) {
+ 			struct mbuf *op_err;
+diff --git a/usrsctplib/netinet/sctp_input.c b/usrsctplib/netinet/sctp_input.c
+index a3c1476..f822fc0 100755
+--- a/usrsctplib/netinet/sctp_input.c
++++ b/usrsctplib/netinet/sctp_input.c
+@@ -350,7 +350,8 @@ sctp_process_init(struct sctp_init_chunk *cp, struct sctp_tcb *stcb)
+ 	asoc->str_reset_seq_in = asoc->asconf_seq_in + 1;
+ 
+ 	asoc->mapping_array_base_tsn = ntohl(init->initial_tsn);
+-	asoc->tsn_last_delivered = asoc->cumulative_tsn = asoc->asconf_seq_in;
++	asoc->tsn_last_delivered = asoc->asconf_seq_in;
++	SCTP_CUMTSN_STORE(asoc, asoc->asconf_seq_in);
+ 
+ 	asoc->advanced_peer_ack_point = asoc->last_acked_seq;
+ 	/* open the requested streams */
+@@ -3954,7 +3955,8 @@ sctp_handle_stream_reset_response(struct sctp_tcb *stcb,
+ 						sctp_log_map(0, 7, asoc->highest_tsn_inside_map, SCTP_MAP_SLIDE_RESULT);
+ 					}
+ 
+-					stcb->asoc.tsn_last_delivered = stcb->asoc.cumulative_tsn = stcb->asoc.highest_tsn_inside_map;
++					stcb->asoc.tsn_last_delivered = stcb->asoc.highest_tsn_inside_map;
++					SCTP_CUMTSN_STORE(&stcb->asoc, stcb->asoc.highest_tsn_inside_map);
+ 					stcb->asoc.mapping_array_base_tsn = ntohl(resp->senders_next_tsn);
+ 					memset(stcb->asoc.mapping_array, 0, stcb->asoc.mapping_array_size);
+ 
+@@ -4085,7 +4087,8 @@ sctp_handle_str_reset_request_tsn(struct sctp_tcb *stcb,
+ 			if (SCTP_BASE_SYSCTL(sctp_logging_level) & SCTP_MAP_LOGGING_ENABLE) {
+ 				sctp_log_map(0, 10, asoc->highest_tsn_inside_map, SCTP_MAP_SLIDE_RESULT);
+ 			}
+-			asoc->tsn_last_delivered = asoc->cumulative_tsn = asoc->highest_tsn_inside_map;
++			asoc->tsn_last_delivered = asoc->highest_tsn_inside_map;
++			SCTP_CUMTSN_STORE(asoc, asoc->highest_tsn_inside_map);
+ 			asoc->mapping_array_base_tsn = asoc->highest_tsn_inside_map + 1;
+ 			memset(asoc->mapping_array, 0, asoc->mapping_array_size);
+ 			asoc->highest_tsn_inside_nr_map = asoc->highest_tsn_inside_map;
+diff --git a/usrsctplib/netinet/sctp_os_userspace.h b/usrsctplib/netinet/sctp_os_userspace.h
+index 066fd40..4d5f1da 100755
+--- a/usrsctplib/netinet/sctp_os_userspace.h
++++ b/usrsctplib/netinet/sctp_os_userspace.h
+@@ -959,7 +959,8 @@ int sctp_userspace_get_mtu_from_ifn(uint32_t if_index);
+ /* wakeup a socket */
+ #define SCTP_SOWAKEUP(so)	wakeup(&(so)->so_timeo, so)
+ /* number of bytes ready to read */
+-#define SCTP_SBAVAIL(sb)	(sb)->sb_cc
++/* Match the atomic writers used by SCTP_SB_INCR/SCTP_SB_DECR. */
++#define SCTP_SBAVAIL(sb)	atomic_fetchadd_int(&(sb)->sb_cc, 0)
+ #define SCTP_SB_INCR(sb, incr)			\
+ {						\
+ 	atomic_add_int(&(sb)->sb_cc, incr);	\
+diff --git a/usrsctplib/netinet/sctp_output.c b/usrsctplib/netinet/sctp_output.c
+index 0a3453b..763be4c 100755
+--- a/usrsctplib/netinet/sctp_output.c
++++ b/usrsctplib/netinet/sctp_output.c
+@@ -11323,7 +11323,7 @@ sctp_send_sack(struct sctp_tcb *stcb, int so_locked)
+ 	}
+ #endif
+ 	/* reset the readers interpretation */
+-	stcb->freed_by_sorcv_sincelast = 0;
++	SCTP_SHARED_STORE32(&stcb->freed_by_sorcv_sincelast, 0);
+ 
+ 	if (type == SCTP_SELECTIVE_ACK) {
+ 		sack = mtod(a_chk->data, struct sctp_sack_chunk *);
+@@ -11534,7 +11534,7 @@ sctp_send_sack(struct sctp_tcb *stcb, int so_locked)
+ 		nr_sack->ch.chunk_length = htons(a_chk->send_size);
+ 	}
+ 	TAILQ_INSERT_TAIL(&asoc->control_send_queue, a_chk, sctp_next);
+-	asoc->my_last_reported_rwnd = asoc->my_rwnd;
++	SCTP_SHARED_STORE32(&asoc->my_last_reported_rwnd, asoc->my_rwnd);
+ 	asoc->ctrl_queue_cnt++;
+ 	asoc->send_sack = 0;
+ 	SCTP_STAT_INCR(sctps_sendsacks);
+@@ -12465,7 +12465,7 @@ jump_out:
+ 	if (asoc->my_rwnd) {
+ 		drp->current_onq = htonl(asoc->size_on_reasm_queue +
+ 		    asoc->size_on_all_streams +
+-		    asoc->my_rwnd_control_len +
++		    atomic_fetchadd_int(&asoc->my_rwnd_control_len, 0) +
+ 		    SCTP_SBAVAIL(&stcb->sctp_socket->so_rcv));
+ 	} else {
+ 		/*-
+diff --git a/usrsctplib/netinet/sctp_pcb.c b/usrsctplib/netinet/sctp_pcb.c
+index e8ef38e..5538bac 100755
+--- a/usrsctplib/netinet/sctp_pcb.c
++++ b/usrsctplib/netinet/sctp_pcb.c
+@@ -141,14 +141,14 @@ sctp_fill_pcbinfo(struct sctp_pcbinfo *spcb)
+ 	 * does not hurt.
+ 	 */
+ 	SCTP_INP_INFO_RLOCK();
+-	spcb->ep_count = SCTP_BASE_INFO(ipi_count_ep);
+-	spcb->asoc_count = SCTP_BASE_INFO(ipi_count_asoc);
+-	spcb->laddr_count = SCTP_BASE_INFO(ipi_count_laddr);
+-	spcb->raddr_count = SCTP_BASE_INFO(ipi_count_raddr);
+-	spcb->chk_count = SCTP_BASE_INFO(ipi_count_chunk);
+-	spcb->readq_count = SCTP_BASE_INFO(ipi_count_readq);
+-	spcb->stream_oque = SCTP_BASE_INFO(ipi_count_strmoq);
+-	spcb->free_chunks = SCTP_BASE_INFO(ipi_free_chunks);
++	spcb->ep_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_ep), 0);
++	spcb->asoc_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_asoc), 0);
++	spcb->laddr_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_laddr), 0);
++	spcb->raddr_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_raddr), 0);
++	spcb->chk_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_chunk), 0);
++	spcb->readq_count = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_readq), 0);
++	spcb->stream_oque = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_count_strmoq), 0);
++	spcb->free_chunks = atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_free_chunks), 0);
+ 	SCTP_INP_INFO_RUNLOCK();
+ }
+ 
+@@ -6615,7 +6615,7 @@ sctp_pcb_init(void)
+ #endif
+ #if defined(__Userspace__)
+ 	mbuf_initialize(NULL);
+-	atomic_init();
++	sctp_atomic_init();
+ #if defined(INET) || defined(INET6)
+ 	if (start_threads)
+ 		recv_thread_init();
+@@ -8000,6 +8000,17 @@ sctp_initiate_iterator(inp_func inpf,
+  * Atomically add flags to the sctp_flags of an inp.
+  * To be used when the write lock of the inp is not held.
+  */
++int
++sctp_pcb_flags_cas(struct sctp_inpcb *inp, uint32_t expected, uint32_t desired)
++{
++#if defined(__Userspace__) && defined(__linux__)
++	return atomic_compare_exchange_strong_explicit(&inp->sctp_flags, &expected,
++	    desired, memory_order_seq_cst, memory_order_seq_cst);
++#else
++	return atomic_cmpset_int(&inp->sctp_flags, expected, desired);
++#endif
++}
++
+ void
+ sctp_pcb_add_flags(struct sctp_inpcb *inp, uint32_t flags)
+ {
+@@ -8008,5 +8019,5 @@ sctp_pcb_add_flags(struct sctp_inpcb *inp, uint32_t flags)
+ 	do {
+ 		old_flags = inp->sctp_flags;
+ 		new_flags = old_flags | flags;
+-	} while (atomic_cmpset_int(&inp->sctp_flags, old_flags, new_flags) == 0);
++	} while (sctp_pcb_flags_cas(inp, old_flags, new_flags) == 0);
+ }
+diff --git a/usrsctplib/netinet/sctp_pcb.h b/usrsctplib/netinet/sctp_pcb.h
+index 3d893bc..db9d3f2 100755
+--- a/usrsctplib/netinet/sctp_pcb.h
++++ b/usrsctplib/netinet/sctp_pcb.h
+@@ -40,6 +40,12 @@
+ #include <netinet/sctp_constants.h>
+ #include <netinet/sctp_sysctl.h>
+ 
++#if defined(__Userspace__) && defined(__linux__)
++#include <stdatomic.h>
++_Static_assert(sizeof(_Atomic uint32_t) == sizeof(uint32_t), "endpoint flag size");
++_Static_assert(_Alignof(_Atomic uint32_t) == _Alignof(uint32_t), "endpoint flag alignment");
++#endif
++
+ LIST_HEAD(sctppcbhead, sctp_inpcb);
+ LIST_HEAD(sctpasochead, sctp_tcb);
+ LIST_HEAD(sctpladdr, sctp_laddr);
+@@ -466,7 +472,14 @@ struct sctp_inpcb {
+ 	/* back pointer to our socket */
+ 	struct socket *sctp_socket;
+ 	uint64_t sctp_features;	/* Feature flags */
++#if defined(__Userspace__) && defined(__linux__)
++	/* Some flag updates intentionally run without the INP write lock.
++	 * Atomic storage makes all readers and compound bit updates match those
++	 * compare/exchange writers, including cross-endpoint bind probes. */
++	_Atomic uint32_t sctp_flags;
++#else
+ 	uint32_t sctp_flags;	/* INP state flag set */
++#endif
+ 	uint32_t sctp_mobility_features; /* Mobility  Feature flags */
+ 	struct sctp_pcb sctp_ep;/* SCTP ep data */
+ 	/* head of the hash of all associations */
+@@ -832,6 +845,8 @@ int sctp_swap_inpcb_for_listen(struct sctp_inpcb *inp);
+ 
+ void sctp_clean_up_stream(struct sctp_tcb *stcb, struct sctp_readhead *rh);
+ 
++int sctp_pcb_flags_cas(struct sctp_inpcb *inp, uint32_t expected, uint32_t desired);
++
+ void
+ sctp_pcb_add_flags(struct sctp_inpcb *, uint32_t);
+ 
+diff --git a/usrsctplib/netinet/sctp_structs.h b/usrsctplib/netinet/sctp_structs.h
+index 894137a..3967342 100755
+--- a/usrsctplib/netinet/sctp_structs.h
++++ b/usrsctplib/netinet/sctp_structs.h
+@@ -831,7 +831,12 @@ struct sctp_asconf_ack {
+  */
+ struct sctp_association {
+ 	/* association state */
++#if defined(__Userspace__) && defined(__linux__)
++	/* Receive/shutdown paths snapshot association state under different locks. */
++	_Atomic int state;
++#else
+ 	int state;
++#endif
+ 
+ 	/* queue of pending addrs to add/delete */
+ 	struct sctp_asconf_addrhead asconf_queue;
+diff --git a/usrsctplib/netinet/sctp_usrreq.c b/usrsctplib/netinet/sctp_usrreq.c
+index 53aeaa1..844fa53 100755
+--- a/usrsctplib/netinet/sctp_usrreq.c
++++ b/usrsctplib/netinet/sctp_usrreq.c
+@@ -956,7 +956,7 @@ sctp_detach(struct socket *so)
+ 	sctp_log_closing(inp, NULL, 17);
+ #endif
+ 	if (((flags & SCTP_PCB_FLAGS_SOCKET_GONE) == 0) &&
+-	    (atomic_cmpset_int(&inp->sctp_flags, flags, (flags | SCTP_PCB_FLAGS_SOCKET_GONE | SCTP_PCB_FLAGS_CLOSE_IP)))) {
++	    (sctp_pcb_flags_cas(inp, flags, (flags | SCTP_PCB_FLAGS_SOCKET_GONE | SCTP_PCB_FLAGS_CLOSE_IP)))) {
+ 		if (((so->so_options & SO_LINGER) && (so->so_linger == 0)) ||
+ 		    (SCTP_SBAVAIL(&so->so_rcv) > 0)) {
+ #ifdef SCTP_LOG_CLOSING
+diff --git a/usrsctplib/netinet/sctp_var.h b/usrsctplib/netinet/sctp_var.h
+index ab67402..358a457 100755
+--- a/usrsctplib/netinet/sctp_var.h
++++ b/usrsctplib/netinet/sctp_var.h
+@@ -86,7 +86,38 @@ extern struct pr_usrreqs sctp_usrreqs;
+ 
+ #define sctp_maxspace(sb) (max((sb)->sb_hiwat,SCTP_MINIMAL_RWND))
+ 
++/* Linux userspace receive callbacks snapshot cumulative_tsn without the TCB
++ * lock. Keep every writer atomic as well; locked readers remain protected by
++ * the TCB lock. No lock-order changes or SCTP ordering/retry changes. */
++#if defined(__Userspace__) && defined(__linux__)
++#define SCTP_SHARED_STORE32(address, value) __atomic_store_n((address), (value), __ATOMIC_RELAXED)
++#define SCTP_SHARED_LOAD32(address) __atomic_load_n((address), __ATOMIC_RELAXED)
++#define SCTP_SHARED_TAKE32(address) __atomic_exchange_n((address), 0, __ATOMIC_RELAXED)
++#else
++#define SCTP_SHARED_STORE32(address, value) (*(address) = (value))
++#define SCTP_SHARED_LOAD32(address) (*(address))
++static inline uint32_t sctp_shared_take32(uint32_t *address)
++{
++	const uint32_t value = *address;
++	*address = 0;
++	return value;
++}
++#define SCTP_SHARED_TAKE32(address) sctp_shared_take32(address)
++#endif
++#define SCTP_CUMTSN_STORE(asoc, value) SCTP_SHARED_STORE32(&(asoc)->cumulative_tsn, value)
++#define SCTP_CUMTSN_LOAD(asoc) SCTP_SHARED_LOAD32(&(asoc)->cumulative_tsn)
++
++#if defined(__Userspace__)
++/* Snapshot once: receive consumption updates this counter atomically. */
++static inline long
++sctp_userspace_sbspace(uint32_t maximum, uint32_t used)
++{
++    return maximum > used ? (long)(maximum - used) : 0;
++}
++#define sctp_sbspace(asoc, sb) sctp_userspace_sbspace(sctp_maxspace(sb), atomic_fetchadd_int(&(asoc)->sb_cc, 0))
++#else
+ #define	sctp_sbspace(asoc, sb) ((long) ((sctp_maxspace(sb) > (asoc)->sb_cc) ? (sctp_maxspace(sb) - (asoc)->sb_cc) : 0))
++#endif
+ 
+ #define	sctp_sbspace_failedmsgs(sb) ((long) ((sctp_maxspace(sb) > SCTP_SBAVAIL(sb)) ? (sctp_maxspace(sb) - SCTP_SBAVAIL(sb)) : 0))
+ 
+@@ -152,7 +183,7 @@ extern struct pr_usrreqs sctp_usrreqs;
+ 			(_chk)->whoTo = NULL; \
+ 		} \
+ 		if (((_stcb)->asoc.free_chunk_cnt > SCTP_BASE_SYSCTL(sctp_asoc_free_resc_limit)) || \
+-		    (SCTP_BASE_INFO(ipi_free_chunks) > SCTP_BASE_SYSCTL(sctp_system_free_resc_limit))) { \
++		    (atomic_fetchadd_int(&SCTP_BASE_INFO(ipi_free_chunks), 0) > SCTP_BASE_SYSCTL(sctp_system_free_resc_limit))) { \
+ 			SCTP_ZONE_FREE(SCTP_BASE_INFO(ipi_zone_chunk), (_chk)); \
+ 			SCTP_DECR_CHK_COUNT(); \
+ 		} else { \
+diff --git a/usrsctplib/netinet/sctputil.c b/usrsctplib/netinet/sctputil.c
+index b772183..f474059 100755
+--- a/usrsctplib/netinet/sctputil.c
++++ b/usrsctplib/netinet/sctputil.c
+@@ -89,7 +89,7 @@ sctp_sblog(struct sockbuf *sb, struct sctp_tcb *stcb, int from, int incr)
+ 	sctp_clog.x.sb.stcb = stcb;
+ 	sctp_clog.x.sb.so_sbcc = SCTP_SBAVAIL(sb);
+ 	if (stcb)
+-		sctp_clog.x.sb.stcb_sbcc = stcb->asoc.sb_cc;
++		sctp_clog.x.sb.stcb_sbcc = atomic_fetchadd_int(&stcb->asoc.sb_cc, 0);
+ 	else
+ 		sctp_clog.x.sb.stcb_sbcc = 0;
+ 	sctp_clog.x.sb.incr = incr;
+@@ -6017,8 +6017,9 @@ sctp_user_rcvd(struct sctp_tcb *stcb, uint32_t *freed_so_far, int hold_rlock,
+ 
+ 	/* Figure out what the rwnd would be */
+ 	rwnd = sctp_calc_rwnd(stcb, &stcb->asoc);
+-	if (rwnd >= stcb->asoc.my_last_reported_rwnd) {
+-		dif = rwnd - stcb->asoc.my_last_reported_rwnd;
++	const uint32_t reported = SCTP_SHARED_LOAD32(&stcb->asoc.my_last_reported_rwnd);
++	if (rwnd >= reported) {
++		dif = rwnd - reported;
+ 	} else {
+ 		dif = 0;
+ 	}
+@@ -6058,7 +6059,7 @@ sctp_user_rcvd(struct sctp_tcb *stcb, uint32_t *freed_so_far, int hold_rlock,
+ 		SCTP_TCB_UNLOCK(stcb);
+ 	} else {
+ 		/* Update how much we have pending */
+-		stcb->freed_by_sorcv_sincelast = dif;
++		SCTP_SHARED_STORE32(&stcb->freed_by_sorcv_sincelast, dif);
+ 	}
+  out:
+ 	if (so && r_unlocked && hold_rlock) {
+@@ -6305,6 +6306,12 @@ sctp_sorecvmsg(struct socket *so,
+ #if defined(__APPLE__) && !defined(__Userspace__)
+ 	error = sblock(&so->so_rcv, SBLOCKWAIT(in_flags));
+ #endif
++	/* Queue links and control metadata are owned by the input read lock,
++	 * not the socket buffer lock. Acquire it before the first lookup. */
++	if (hold_rlock == 0) {
++		SCTP_INP_READ_LOCK(inp);
++		hold_rlock = 1;
++	}
+ 	/* we possibly have data we can read */
+ 	/*sa_ignore FREED_MEMORY*/
+ 	control = TAILQ_FIRST(&inp->read_queue);
+@@ -6449,6 +6456,9 @@ sctp_sorecvmsg(struct socket *so,
+ 		 */
+ 		held_length = SCTP_SBAVAIL(&so->so_rcv);
+ 		control->held_length = SCTP_SBAVAIL(&so->so_rcv);
++		/* Never carry the queue lock into the socket wait/restart path. */
++		SCTP_INP_READ_UNLOCK(inp);
++		hold_rlock = 0;
+ 		goto restart;
+ 	}
+ 	/* Clear the held length since there is something to read */
+@@ -6496,8 +6506,7 @@ sctp_sorecvmsg(struct socket *so,
+ 			 * we then will go to the sctp_user_rcvd() that will
+ 			 * not lock until it KNOWs it MUST send a WUP-SACK.
+ 			 */
+-			freed_so_far = (uint32_t)stcb->freed_by_sorcv_sincelast;
+-			stcb->freed_by_sorcv_sincelast = 0;
++			freed_so_far = SCTP_SHARED_TAKE32(&stcb->freed_by_sorcv_sincelast);
+ 		}
+ 	}
+ 	if (stcb &&
+@@ -6557,7 +6566,7 @@ sctp_sorecvmsg(struct socket *so,
+ 		 * update off the real current cum-ack, if we have an stcb.
+ 		 */
+ 		if ((control->do_not_ref_stcb == 0) && stcb)
+-			sinfo->sinfo_cumtsn = stcb->asoc.cumulative_tsn;
++			sinfo->sinfo_cumtsn = SCTP_CUMTSN_LOAD(&stcb->asoc);
+ 		/*
+ 		 * mask off the high bits, we keep the actual chunk bits in
+ 		 * there.
+@@ -7131,7 +7140,7 @@ sctp_sorecvmsg(struct socket *so,
+ #endif
+ 		}
+ 		/* Save the value back for next time */
+-		stcb->freed_by_sorcv_sincelast = freed_so_far;
++		SCTP_SHARED_STORE32(&stcb->freed_by_sorcv_sincelast, freed_so_far);
+ 		atomic_subtract_int(&stcb->asoc.refcnt, 1);
+ 	}
+ 	if (SCTP_BASE_SYSCTL(sctp_logging_level) &SCTP_RECV_RWND_LOGGING_ENABLE) {
+diff --git a/usrsctplib/user_atomic.h b/usrsctplib/user_atomic.h
+index 6a59587..91294c5 100755
+--- a/usrsctplib/user_atomic.h
++++ b/usrsctplib/user_atomic.h
+@@ -78,9 +78,9 @@
+ }
+ #endif
+ #if defined(_WIN32)
+-static void atomic_init(void) {} /* empty when we are not using atomic_mtx */
++static void sctp_atomic_init(void) {} /* empty when we are not using atomic_mtx */
+ #else
+-static inline void atomic_init(void) {} /* empty when we are not using atomic_mtx */
++static inline void sctp_atomic_init(void) {} /* empty when we are not using atomic_mtx */
+ #endif
+ 
+ #else
+@@ -132,7 +132,7 @@ static inline void atomic_init(void) {} /* empty when we are not using atomic_mt
+ 	} \
+ }
+ #endif
+-static inline void atomic_init(void) {} /* empty when we are not using atomic_mtx */
++static inline void sctp_atomic_init(void) {} /* empty when we are not using atomic_mtx */
+ #endif
+ 
+ #if 0 /* using libatomic_ops */
+@@ -164,7 +164,7 @@ static inline void atomic_init(void) {} /* empty when we are not using atomic_mt
+ 
+ #define atomic_cmpset_int(dst, exp, src) AO_compare_and_swap((AO_t*)dst, exp, src)
+ 
+-static inline void atomic_init() {} /* empty when we are not using atomic_mtx */
++static inline void sctp_atomic_init() {} /* empty when we are not using atomic_mtx */
+ #endif /* closing #if for libatomic */
+ 
+ #if 0 /* using atomic_mtx */
+@@ -174,7 +174,7 @@ static inline void atomic_init() {} /* empty when we are not using atomic_mtx */
+ extern userland_mutex_t atomic_mtx;
+ 
+ #if defined(_WIN32)
+-static inline void atomic_init() {
++static inline void sctp_atomic_init() {
+ 	InitializeCriticalSection(&atomic_mtx);
+ }
+ static inline void atomic_destroy() {
+@@ -187,7 +187,7 @@ static inline void atomic_unlock() {
+ 	LeaveCriticalSection(&atomic_mtx);
+ }
+ #else
+-static inline void atomic_init() {
++static inline void sctp_atomic_init() {
+ 	pthread_mutexattr_t mutex_attr;
+ 
+ 	pthread_mutexattr_init(&mutex_attr);
+diff --git a/usrsctplib/user_socketvar.h b/usrsctplib/user_socketvar.h
+index 04c806a..a0a25a0 100755
+--- a/usrsctplib/user_socketvar.h
++++ b/usrsctplib/user_socketvar.h
+@@ -431,8 +431,8 @@ void	sofree(struct socket *so);
+ 
+ /* replacing imin with min (user_environment.h) */
+ #define	sbspace(sb) \
+-    ((long) min((int)((sb)->sb_hiwat - (sb)->sb_cc), \
+-	 (int)((sb)->sb_mbmax - (sb)->sb_mbcnt)))
++    ((long) min((int)((sb)->sb_hiwat - atomic_fetchadd_int(&(sb)->sb_cc, 0)), \
++	 (int)((sb)->sb_mbmax - atomic_fetchadd_int(&(sb)->sb_mbcnt, 0))))
+ 
+ /* do we have to send all at once on a socket? */
+ #define	sosendallatonce(so) \
+@@ -440,7 +440,7 @@ void	sofree(struct socket *so);
+ 
+ /* can we read something from so? */
+ #define	soreadable(so) \
+-    ((int)((so)->so_rcv.sb_cc) >= (so)->so_rcv.sb_lowat || \
++    ((int)atomic_fetchadd_int(&(so)->so_rcv.sb_cc, 0) >= (so)->so_rcv.sb_lowat || \
+ 	((so)->so_rcv.sb_state & SBS_CANTRCVMORE) || \
+ 	!TAILQ_EMPTY(&(so)->so_comp) || (so)->so_error)
+ 

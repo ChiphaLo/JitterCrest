@@ -1,6 +1,7 @@
 #include "speedtest/http.hpp"
 #include "speedtest/client_info.hpp"
 #include "speedtest/progress.hpp"
+#include "speedtest/rtc.hpp"
 #include "speedtest/sdp.hpp"
 #include <algorithm>
 #include <boost/asio/co_spawn.hpp>
@@ -180,9 +181,9 @@ bool private_client(std::string_view raw) {
            (words[0] == 0x20 && words[1] == 1 && words[2] == 0x0d && words[3] == 0xb8);
 }
 struct App {
-    explicit App(Config value)
+    explicit App(Config value, const asio::any_io_executor &executor)
         : cfg(std::move(value)), limits(cfg), info(std::make_shared<ClientInfo>()),
-          payload(chunk_size) {
+          payload(chunk_size), rtc(executor, cfg) {
         if (RAND_bytes(reinterpret_cast<unsigned char *>(payload.data()),
                        static_cast<int>(payload.size())) != 1)
             throw std::runtime_error("download entropy unavailable");
@@ -193,6 +194,7 @@ struct App {
     std::shared_ptr<ClientInfo> info;
     const Clock::time_point epoch = Clock::now();
     std::vector<char> payload;
+    RtcService rtc;
     Clock::time_point checked_deadline(Clock::time_point start, std::uint64_t ms) const {
         const auto seconds =
             std::chrono::duration_cast<std::chrono::seconds>(start + Millis(ms) - epoch).count();
@@ -537,7 +539,11 @@ awaitable<Error> Session::read_head() {
                 normalized += "\r\n";
             }
             Error error;
-            const auto used = parser_->put(asio::buffer(normalized), error);
+            // This parse is synchronous and normalized owns the complete head.
+            // Select Beast's contiguous const-buffer overload directly instead
+            // of copying through its generic buffer-sequence stack buffer.
+            const auto used =
+                parser_->put(asio::const_buffer(normalized.data(), normalized.size()), error);
             if (error == http::error::need_more)
                 error = {};
             if (!error && (used != normalized.size() || !parser_->is_header_done()))
@@ -1143,17 +1149,42 @@ awaitable<void> Session::offer() {
         co_await send(failure(400, "invalid SDP offer"));
         co_return;
     }
+    if (cancel && cfg.rtc_experimental) {
+        try {
+            co_await app_->rtc.cancel(ip_, attempt);
+        } catch (const RtcFailure &error) {
+            rejected = failure(error.status, error.what());
+        }
+        if (rejected)
+            co_await send(std::move(*rejected));
+        else
+            co_await send(response(204, {}, {}, "no-store"));
+        co_return;
+    }
+    std::optional<FilteredSdp> filtered;
     if (field("sdp").is_string()) {
         try {
-            static_cast<void>(sanitize_sdp(field("sdp").get<std::string>()));
+            filtered = sanitize_sdp(field("sdp").get<std::string>());
         } catch (const SdpFailure &error) {
             rejected = failure(error.kind == SdpError::limit ? 413 : 400,
                                error.kind == SdpError::limit ? "WebRTC SDP exceeds limits"
                                                              : "invalid SDP offer");
         }
     }
-    // Native RTC session transport is a separate required milestone. This
-    // intermediate HTTP binary fails closed, never proxies or invokes Rust.
+    if (!rejected && filtered && cfg.rtc_experimental) {
+        std::optional<Json> answer;
+        try {
+            answer = co_await app_->rtc.offer(
+                ip_, attempt, cfg.rtc_local_test ? field("sdp").get<std::string>() : filtered->sdp,
+                probe_only());
+        } catch (const RtcFailure &error) {
+            rejected = failure(error.status, error.what());
+        }
+        if (answer) {
+            co_await send(json(*answer));
+            co_return;
+        }
+    }
     if (!rejected)
         rejected = failure(503, "WebRTC server dependency is unavailable");
     co_await send(std::move(*rejected));
@@ -1163,7 +1194,8 @@ awaitable<void> Session::offer() {
 struct HttpServer::Impl : std::enable_shared_from_this<HttpServer::Impl> {
     Impl(asio::io_context &io, Config cfg, std::function<void()> stopped)
         : context(io), acceptor(asio::make_strand(io)), grace(acceptor.get_executor()),
-          app(std::make_shared<App>(std::move(cfg))), on_stopped(std::move(stopped)) {
+          app(std::make_shared<App>(std::move(cfg), io.get_executor())),
+          on_stopped(std::move(stopped)) {
         const auto endpoint = Tcp::endpoint(asio::ip::make_address(app->cfg.host),
                                             static_cast<unsigned short>(app->cfg.port));
         acceptor.open(endpoint.protocol());
@@ -1210,6 +1242,15 @@ struct HttpServer::Impl : std::enable_shared_from_this<HttpServer::Impl> {
                 return;
             self->stopping = true;
             self->app->info->shutdown();
+            asio::co_spawn(self->acceptor.get_executor(), self->app->rtc.shutdown(),
+                           [self](const std::exception_ptr &error) {
+                               if (error) {
+                                   self->failed = true;
+                                   std::clog << "{\"event\":\"rtc_shutdown_failed\"}\n";
+                               }
+                               self->rtc_stopped = true;
+                               self->finish();
+                           });
             Error ignored;
             observe(self->acceptor.close(ignored));
             for (const auto &[id, session] : self->sessions) {
@@ -1231,7 +1272,7 @@ struct HttpServer::Impl : std::enable_shared_from_this<HttpServer::Impl> {
         });
     }
     void finish() {
-        if (stopping && sessions.empty()) {
+        if (stopping && rtc_stopped && sessions.empty()) {
             grace.cancel();
             if (on_stopped)
                 std::exchange(on_stopped, {})();
@@ -1244,6 +1285,7 @@ struct HttpServer::Impl : std::enable_shared_from_this<HttpServer::Impl> {
     std::map<std::uint64_t, std::shared_ptr<Session>> sessions;
     std::uint64_t next_id{};
     bool stopping{};
+    bool rtc_stopped{};
     std::atomic<bool> failed{};
     std::function<void()> on_stopped;
 };

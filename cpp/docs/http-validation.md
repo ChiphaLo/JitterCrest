@@ -1,5 +1,9 @@
 # Native HTTP milestone — 2026-10-25
 
+Historical HTTP-only snapshot. Native RTC has since been implemented; see
+`rtc-validation.md` for subsequent evidence and still-open acceptance gates.
+Statements below about RTC not being implemented describe this earlier snapshot.
+
 This is partial progress toward the complete independent C++ backend, **not**
 full acceptance. Rust production/source/frontend/archives remain unchanged.
 Valid WebRTC negotiation still fails closed with 503; no Rust executable,

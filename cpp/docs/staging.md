@@ -2,7 +2,9 @@
 
 Production stays on Rust. Neither the templates nor local tests install a unit,
 change a production Caddy configuration, or switch traffic. The C++ HTTP binary
-is an intermediate build: native WebRTC and full acceptance are still pending.
+is an intermediate build: native WebRTC is implemented but its complete safety,
+deployment and acceptance gates are still pending. Keep the RTC flag off in
+staging templates until those gates pass; see `rtc-validation.md`.
 
 | Resource | Independent C++ staging value |
 |---|---|
@@ -38,7 +40,7 @@ The systemd template preserves the existing hardening approach: non-root user,
 read-only system/home protections, empty capabilities, bounded tasks/memory,
 restricted address families, journal logging and a ten-second stop limit above
 the five-second HTTP drain grace. Memory ceilings are initial containment, not
-measured capacity claims. WebRTC's future UDP ports/candidate mapping must be
+measured capacity claims. WebRTC UDP ports/candidate mapping must be
 validated separately before any public staging session is offered.
 
 Template syntax is reviewable source, not proof of effective hardening, TLS,
@@ -47,5 +49,18 @@ switch has been performed as part of the C++ work.
 
 Local validation: `systemd-analyze verify --man=no` returned success for a scratch
 copy with only executable/working-directory paths changed to the local build.
-The source template was not installed. Caddy is unavailable locally, so its
-engine validation and live proxy/TLS tests remain unperformed.
+The source template was not installed. A local extracted Ubuntu Caddy 2.6.2
+binary (no package installation or system service) successfully validated the
+Caddyfile with its Caddyfile adapter. `tests/proxy_tls_contract.py` subsequently
+passed shared Rust/C++ live HTTP and HTTPS contracts using this template on
+isolated loopback ports: 10 KiB/100 KiB/1 MiB downloads, 1 MiB upload, exact CORS,
+NDJSON received before upload starts and final server byte accounting. The same
+unchanged frontend completed a paired RTC test and the real Restart/RTT rendering
+path through HTTPS signaling. Python verifies certificate trust and hostname;
+Chromium pins only the ephemeral certificate's public key. No certificate is
+installed into the system trust store. Caddy config/data/certificates are confined
+to the test temporary directory and all child services stop afterward.
+
+This validates a local direct TLS/proxy UI profile, not a public deployment,
+central-UI-to-separate-agent cross-origin matrix, production firewall, rollback
+or effective systemd hardening. Those scopes still require separate evidence.

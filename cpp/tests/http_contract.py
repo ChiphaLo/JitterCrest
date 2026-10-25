@@ -25,7 +25,7 @@ def allocate_port():
 
 
 class Server:
-    def __init__(self, binary, env):
+    def __init__(self, binary, env, allow_self=False):
         self.port = allocate_port()
         self.log = tempfile.TemporaryFile()
         base = {k: v for k, v in os.environ.items() if not k.startswith((
@@ -36,6 +36,8 @@ class Server:
                     SPEEDTEST_RUST_RTC_EXPERIMENTAL="0", ALLOWED_ORIGINS="https://example.invalid",
                     SPEEDTEST_NODES='[{"base":"","id":"local","label":"Local"}]')
         base.update(env)
+        if allow_self:
+            base["ALLOWED_ORIGINS"] = f"http://127.0.0.1:{self.port}"
         self.process = subprocess.Popen([str(Path(binary).resolve())], env=base,
                                         stdout=self.log, stderr=self.log)
         try:
