@@ -5,9 +5,9 @@ dual-licensed under its upstream MIT OR Apache-2.0 terms. Original copyright
 notices and both license files are retained in that directory.
 
 Service-specific changes cover bundled FORWARD-TSN parsing and compatibility with
-the preserved Node/Werift sender (zero-Rexmit handling, fast-recovery state,
-T3 recovery reset and restartable miss indicators). These are not represented as
-a general-purpose SCTP standards update. Most deterministic tests pass, but two
+the sender (fast-recovery state, T3 recovery reset and restartable miss indicators). Zero-retry DATA now follows
+the negotiated budget: the old reliable-zero compatibility behavior was removed.
+These are not represented as a general-purpose SCTP standards update. Most deterministic tests pass, but two
 upstream vendor tests require external fuzz-artifact files not present in this
 source snapshot; the normal workspace unit suite excludes that vendor crate.
 

@@ -197,29 +197,54 @@ fn fast_retransmit_repeat_after_lost_fast_retransmission() -> Result<()> {
 }
 
 #[test]
-fn outbound_zero_rexmit_compat_is_independent_of_fast_recovery() -> Result<()> {
+fn outbound_zero_rexmit_abandons_before_retry() -> Result<()> {
     let mut a = create_association_internal(Config {
         net_conn: Arc::new(DumbConn {}),
         max_receive_buffer_size: 0,
         max_message_size: 0,
-        name: "zero-rexmit-compat".to_owned(),
+        name: "zero-rexmit-strict".to_owned(),
         local_port: 5000,
         remote_port: 5000,
     });
     a.use_forward_tsn = true;
     let stream = a.create_stream(3, false).expect("test stream is valid");
-    stream.set_reliability_params(true, ReliabilityType::Rexmit, 0);
-    let data = ChunkPayloadData {
+    let make_data = |nsent, payload_type| ChunkPayloadData {
         stream_identifier: 3,
-        nsent: 1,
+        nsent,
+        payload_type,
         all_inflight: Arc::new(AtomicBool::new(true)),
         ..Default::default()
     };
-    a.check_partial_reliability_status(&data);
-    assert!(!data.abandoned());
-    stream.set_reliability_params(true, ReliabilityType::Rexmit, 1);
-    a.check_partial_reliability_status(&data);
-    assert!(data.abandoned());
+    stream.set_reliability_params(true, ReliabilityType::Rexmit, 0);
+    let unsent = make_data(0, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&unsent);
+    assert!(!unsent.abandoned(), "the original transmission is allowed");
+    let original = make_data(1, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&original);
+    assert!(
+        !original.abandoned(),
+        "healthy in-flight DATA must not be skipped"
+    );
+    let retry = make_data(2, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&retry);
+    assert!(
+        retry.abandoned(),
+        "Rexmit=0 must not silently become reliable"
+    );
+    let dcep = make_data(10, PayloadProtocolIdentifier::Dcep);
+    a.check_partial_reliability_status(&dcep);
+    assert!(!dcep.abandoned(), "DCEP remains reliable");
+    stream.set_reliability_params(false, ReliabilityType::Reliable, 0);
+    let reliable = make_data(10, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&reliable);
+    assert!(!reliable.abandoned(), "control DATA remains reliable");
+    stream.set_reliability_params(true, ReliabilityType::Rexmit, 2);
+    let positive = make_data(1, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&positive);
+    assert!(!positive.abandoned());
+    let exhausted = make_data(2, PayloadProtocolIdentifier::Binary);
+    a.check_partial_reliability_status(&exhausted);
+    assert!(exhausted.abandoned());
     Ok(())
 }
 
@@ -746,5 +771,55 @@ async fn test_assoc_max_message_size_explicit() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn zero_retry_recovery_skips_only_lost_data_and_emits_forward_tsn() -> Result<()> {
+    for fast in [true, false] {
+        let mut a = create_association_internal(Config {
+            net_conn: Arc::new(DumbConn {}),
+            max_receive_buffer_size: 0,
+            max_message_size: 0,
+            name: "zero-retry-recovery".to_owned(),
+            local_port: 5000,
+            remote_port: 5000,
+        });
+        a.use_forward_tsn = true;
+        a.cumulative_tsn_ack_point = 9;
+        a.advanced_peer_tsn_ack_point = 9;
+        a.cwnd = 4096;
+        a.rwnd = 4096;
+        let stream = a.create_stream(3, false).expect("test stream is valid");
+        stream.set_reliability_params(true, ReliabilityType::Rexmit, 0);
+        for tsn in 10..=11 {
+            a.inflight_queue.push_no_check(ChunkPayloadData {
+                tsn,
+                stream_identifier: 3,
+                user_data: Bytes::from_static(b"probe"),
+                payload_type: PayloadProtocolIdentifier::Binary,
+                nsent: 1,
+                miss_indicator: if tsn == 10 { 3 } else { 0 },
+                retransmit: !fast && tsn == 10,
+                all_inflight: Arc::new(AtomicBool::new(true)),
+                ..Default::default()
+            });
+        }
+        a.will_retransmit_fast = fast;
+        let packets = if fast {
+            a.gather_outbound_fast_retransmission_packets(vec![])
+        } else {
+            a.get_data_packets_to_retransmit()
+        };
+        assert!(
+            packets.is_empty(),
+            "zero-retry DATA must not reach the wire twice"
+        );
+        assert!(a.inflight_queue.get(10).unwrap().abandoned());
+        assert!(!a.inflight_queue.get(11).unwrap().abandoned());
+        let forward = a.gather_outbound_forward_tsn_packets(vec![]);
+        assert_eq!(forward.len(), 1, "tail loss needs a prompt FORWARD-TSN");
+        assert_eq!(a.advanced_peer_tsn_ack_point, 10);
+    }
     Ok(())
 }

@@ -219,6 +219,40 @@ with the attribution metadata, not as a confirmed network-origin verdict.
 
 Regression check: `python tests/stability_analysis.py`.
 
+## Measurement-clock and probe-transport correction
+
+All speed-chart coordinates now use elapsed **post-warmup measurement** time.
+The previous upload curve incorrectly started near 2 seconds because its x
+coordinate included warmup although its speed calculation did not. Transfer
+elapsed time remains available as diagnostic metadata. Multi-stream charts use
+a separate display duration; headline bytes/time, warmup and final accounting
+are not changed, and no artificial samples are inserted at time zero.
+
+The server SCTP fork no longer treats negotiated `maxRetransmits=0` as reliable.
+The original DATA is sent normally; once recovery would retry it, the zero-budget
+chunk is abandoned, excluded from both fast/T3 retransmission packets, and
+FORWARD-TSN advances over that abandoned chunk only. Healthy in-flight DATA is
+not prematurely abandoned. DCEP and the reliable control channel are unchanged.
+There is no compatibility switch for reliable-zero behavior.
+
+This intentionally changes the transport's behavior under loss, **not** the RTT,
+jitter, missing/late definitions or 0.99 validity threshold: a lost probe should
+remain missing rather than return late after hidden server retries. Exported
+`probeTransport` records the negotiated policy and `zeroRetransmitHonored`;
+`analysisVersion` is 3. A frontend-only deployment is insufficient: update each
+Rust measurement agent too. Existing agents without that metadata are not proof
+of strict zero-retry operation.
+
+For central-UI acceptance, add `--stability` to `tests/browser_central_ui.py`
+to require the 100 packets/s x 20 s run. Use Linux service binaries for that
+production-timing gate: native Windows debug servers can skip slots because of
+OS timer granularity and are correctly reported incomplete. The 0.99 threshold
+is not relaxed. Loopback Caddy tests do not install their temporary CA as trusted.
+
+Descending clustered-ACK ramps and genuine network/queue stalls can still occur.
+The change removes one confirmed server-induced recovery mechanism, not every
+possible cause of a latency spike. Do not smooth away or discard late samples.
+
 ## Architecture and limitations
 
 - HTTP: fixed 10 KiB/100 KiB/1 MiB payloads, bounded streams, upload accounting,

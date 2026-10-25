@@ -38,7 +38,8 @@ webrtc-sctp = "=0.17.1"
 
 [patch.crates-io]
 # Local fork fixes bundled FORWARD-TSN parsing and preserves the installed
-# Node/Werift sender's zero-Rexmit, fast-recovery and miss-counter behavior:
+# sender's fast-recovery and miss-counter behavior. Zero-retry probes honor
+# the negotiated budget instead of inheriting Node's reliable-zero bug:
 # retransmissions restart the miss counter so a lost fast retransmission can
 # be re-armed by later gap SACKs instead of waiting for the T3 timer. See the
 # migration document. Remaining release gates are deployment/rollback and

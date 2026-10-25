@@ -480,7 +480,6 @@ impl AssociationInternal {
                     }
 
                     fast_retrans_size += data_chunk_size;
-                    self.stats.inc_fast_retrans();
                     c.nsent += 1;
                     // Werift restarts the miss counter after a retransmission, so a
                     // lost fast retransmission can be struck again by later gap
@@ -493,6 +492,12 @@ impl AssociationInternal {
 
                 if let Some(c) = self.inflight_queue.get(tsn) {
                     self.check_partial_reliability_status(c);
+                    if c.abandoned() {
+                        fast_retrans_size -= DATA_CHUNK_HEADER_SIZE + c.user_data.len() as u32;
+                        i += 1;
+                        continue;
+                    }
+                    self.stats.inc_fast_retrans();
                     to_fast_retrans.push(Box::new(c.clone()));
                     log::trace!(
                         "[{}] fast-retransmit: tsn={} sent={} htna={}",
@@ -527,6 +532,27 @@ impl AssociationInternal {
     }
 
     fn gather_outbound_forward_tsn_packets(&mut self, mut raw_packets: Vec<Packet>) -> Vec<Packet> {
+        // Recovery can abandon a zero-retry chunk after the most recent SACK.
+        // Advertise it immediately, including tail loss without a later SACK.
+        if self.use_forward_tsn {
+            if sna32lt(
+                self.advanced_peer_tsn_ack_point,
+                self.cumulative_tsn_ack_point,
+            ) {
+                self.advanced_peer_tsn_ack_point = self.cumulative_tsn_ack_point;
+            }
+            let before = self.advanced_peer_tsn_ack_point;
+            let mut next = before.wrapping_add(1);
+            while let Some(chunk) = self.inflight_queue.get(next) {
+                if !chunk.abandoned() {
+                    break;
+                }
+                self.advanced_peer_tsn_ack_point = next;
+                next = next.wrapping_add(1);
+            }
+            self.will_send_forward_tsn |= self.advanced_peer_tsn_ack_point != before;
+        }
+
         /*log::debug!(
             "[{}] gatherOutboundForwardTSNPackets {}",
             self.name,
@@ -2047,11 +2073,15 @@ impl AssociationInternal {
             let reliability_value = s.reliability_value.load(Ordering::SeqCst);
 
             if reliability_type == ReliabilityType::Rexmit {
-                // Werift 0.23.0 treats zero as false in maybeAbandon(), so
-                // the Node server's outbound test-channel DATA remains
-                // reliable despite the negotiated Rexmit=0. Preserve that
-                // existing service behavior; positive budgets are unchanged.
-                if reliability_value != 0 && c.nsent >= reliability_value {
+                // nsent includes the candidate transmission. Keep the original
+                // DATA in flight until loss recovery requests a second attempt;
+                // abandoning it eagerly would FORWARD-TSN over healthy DATA.
+                let exhausted = if reliability_value == 0 {
+                    c.nsent > 1
+                } else {
+                    c.nsent >= reliability_value
+                };
+                if exhausted {
                     c.set_abandoned(true);
                     log::trace!(
                         "[{}] marked as abandoned: tsn={} ppi={} (remix: {})",
@@ -2118,6 +2148,11 @@ impl AssociationInternal {
 
             if let Some(c) = self.inflight_queue.get(tsn) {
                 self.check_partial_reliability_status(c);
+                if c.abandoned() {
+                    bytes_to_send -= c.user_data.len();
+                    i += 1;
+                    continue;
+                }
 
                 log::trace!(
                     "[{}] retransmitting tsn={} ssn={} sent={}",

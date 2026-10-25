@@ -553,8 +553,13 @@ impl Session {
             }
             return;
         }
+        let probe_transport = self.test.lock().await.clone().map(|channel| {
+            serde_json::json!({"ordered":channel.ordered(),"maxRetransmits":channel.max_retransmits(),
+                "zeroRetransmitHonored":true})
+        });
         let identity = serde_json::json!({"type":"measurementReady","testId":msg["testId"],
-            "sessionId":msg["sessionId"],"sessionHash":msg["sessionHash"],"testHash":msg["testHash"]});
+            "sessionId":msg["sessionId"],"sessionHash":msg["sessionHash"],"testHash":msg["testHash"],
+            "probeTransport":probe_transport});
         let control = self.control.lock().await.clone();
         if let Some(channel) = control
             && let Err(error) = channel.send_text(identity.to_string()).await
@@ -802,6 +807,10 @@ impl Session {
                 Vec::new()
             }
         };
+        let probe_transport = self.test.lock().await.clone().map(|channel| {
+            serde_json::json!({"ordered":channel.ordered(),"maxRetransmits":channel.max_retransmits(),
+                "zeroRetransmitHonored":true})
+        });
         let result = {
             let mut data = lock(&test.data);
             if data.finalized {
@@ -832,6 +841,7 @@ impl Session {
                 "clientUploadActualSent":upload.map(|v| &v["actualSent"]),
                 "samples":samples,"pacing":pacing(&data.sent_times,test.interval_ms),
                 "serverEventLoopDelay":summarize_executor_delay(&delays),
+                "probeTransport":probe_transport,
                 "uploadCompleteAtMs":data.upload_complete_at_ms,"finalizedAtMs":ms(self.epoch)
             })
         };

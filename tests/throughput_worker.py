@@ -77,6 +77,13 @@ return (async () => {
   const stallHistory=[];
   for(let i=0;i<7;i++) publishThroughputSample(stallHistory,i*100,(i+1)*100,i===0?1000000:0,1,(i+1)*100);
   check(clock.messages.at(-1).displayValue===0,'smoothing hid a sustained genuine stall');
+  const warmedReceipts = createServerUploadSampler(1);
+  warmedReceipts.accept({...snap(1000000,100),elapsedMs:2100});
+  check(clock.messages.at(-1).atMs === 100, 'upload chart included the two-second warmup offset');
+  check(warmedReceipts.sampleDetails[0].atMs === 100 && warmedReceipts.sampleDetails[0].transferAtMs === 2100,
+    'measurement and transfer clocks were confused');
+  check(warmedReceipts.samples[0] === 80, 'normalizing the chart changed raw speed');
+  warmedReceipts.stop();
   const originalFetch = globalThis.fetch;
   try {
     const rows = Array.from({length:500},(_,i)=>({bytes:(i+1)*1000,measuredBytes:(i+1)*1000,

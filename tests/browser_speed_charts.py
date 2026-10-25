@@ -48,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
     config = directory / 'Caddyfile'
     config.write_text('''{
  admin off
+ skip_install_trust
  auto_https disable_redirects
 }
 ''' + origin + ''' {
@@ -152,6 +153,10 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 assert page.locator('#phase').inner_text() == 'Speed complete', page.locator('#log').inner_text()
                 page.wait_for_function("() => [...document.querySelectorAll('.speed-result-line')].every(line => line.dataset.provisional === 'false')")
                 evidence['render_diagnostics'] = page.evaluate('() => __speedtestChartDiagnostics()')
+                for kind in ['download','upload']:
+                    points = evidence['render_diagnostics'][kind]['points']
+                    assert 0 <= points[0]['atMs'] < 500, (kind, 'warmup offset leaked into chart', points[0])
+
                 assert evidence['render_diagnostics']['upload']['sources'] == ['server-received']
                 evidence['workers'] = page.evaluate('() => globalThis.__workerRecords')
                 evidence['charts'] = page.evaluate('''() => ['download','upload'].map(kind => {

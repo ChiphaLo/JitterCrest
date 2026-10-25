@@ -30,6 +30,7 @@ parser.add_argument('--ui-binary', type=Path, required=True)
 parser.add_argument('--agent-binary', type=Path, required=True)
 parser.add_argument('--caddy', default=shutil.which('caddy'))
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--stability', action='store_true', help='Also require 100 pps x 20 s stability; use Linux service binaries for production timing acceptance')
 args = parser.parse_args()
 assert args.ui_binary.is_file() and args.agent_binary.is_file() and args.caddy
 args.output.mkdir(parents=True, exist_ok=True)
@@ -44,7 +45,7 @@ evidence = {'ui': ui, 'agents': agents, 'nodes': [], 'requests': [], 'page_error
 with tempfile.TemporaryDirectory(prefix='central-ui-') as temporary:
     directory = Path(temporary)
     config = directory / 'Caddyfile'
-    config.write_text('{\n admin off\n auto_https disable_redirects\n}\n' + '\n'.join(
+    config.write_text('{\n admin off\n skip_install_trust\n auto_https disable_redirects\n}\n' + '\n'.join(
         origin + ' {\n bind 127.0.0.1\n tls internal\n' +
         # No measurement traffic can pass through the UI proxy, even by accident.
         (' @measurement path /download* /upload* /webrtc/*\n respond @measurement 418\n' if i == 0 else '') +
@@ -108,6 +109,10 @@ with tempfile.TemporaryDirectory(prefix='central-ui-') as temporary:
                     result = page.evaluate("({phase: document.getElementById('phase').textContent, rtc: globalThis.__speedtestEvidence})")
                     assert result['phase'] == 'RTT complete', result
                     assert result['rtc']['rtt']['upload']['complete'] and result['rtc']['rtt']['download']['complete']
+                    for direction in ['upload','download']:
+                        policy=result['rtc']['rtt'][direction]['probeTransport']
+                        assert policy == {'ordered':False,'maxRetransmits':0,'zeroRetransmitHonored':True}, policy
+
                     assert page.url.startswith(ui), 'node switch navigated away from central UI'
                     # A real browser CORS check including the custom signaling headers.
                     result['preflight_and_http'] = page.evaluate('''async base => {
@@ -130,6 +135,19 @@ with tempfile.TemporaryDirectory(prefix='central-ui-') as temporary:
                         horizontal:line.getAttribute('y1')===line.getAttribute('y2')};
                     })''')
                     assert all(c['result'] > 0 and c['samples'] > 2 and c['horizontal'] for c in result['charts'])
+                    if i == 0 and args.stability:
+                        page.wait_for_timeout(5000)
+                        page.select_option('#stabilityRate','100')
+                        page.select_option('#stabilityDuration','20')
+                        page.click('#runStability')
+                        page.wait_for_function("()=>['Stability Test Complete','Stability Test (Incomplete)'].includes(document.getElementById('stabilityStatus').textContent) || document.getElementById('stabilityStatus').textContent.startsWith('Stability Test Error:')",timeout=60000)
+                        result['stability']=page.evaluate("()=>({status:document.getElementById('stabilityStatus').textContent,report:lastStabilityReport,evidence:__speedtestEvidence})")
+                        evidence['stability_observation']=result['stability']
+                        assert result['stability']['status']=='Stability Test Complete', {
+                            'status':result['stability']['status'],
+                            'validation':result['stability']['evidence'].get('stability',{}).get('validation')}
+                        assert result['stability']['report']['analysisVersion']==3
+                        assert result['stability']['evidence']['stability']['download']['probeTransport']['zeroRetransmitHonored']
                     evidence['nodes'].append(result)
                 assert not evidence['page_errors'], evidence['page_errors']
                 for agent in agents:

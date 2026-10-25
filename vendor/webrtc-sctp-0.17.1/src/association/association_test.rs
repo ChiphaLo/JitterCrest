@@ -788,7 +788,7 @@ async fn test_assoc_unreliable_rexmit_ordered_no_fragment() -> Result<()> {
 
     let (s0, s1) = establish_session_pair(&br, &a0, &mut a1, SI).await?;
 
-    // The service-compatible Werift sender treats Rexmit=0 as reliable.
+    // Zero retries: the dropped first message must not be recovered.
     s0.set_reliability_params(false, ReliabilityType::Rexmit, 0);
     s1.set_reliability_params(false, ReliabilityType::Rexmit, 0); // doesn't matter
 
@@ -823,14 +823,9 @@ async fn test_assoc_unreliable_rexmit_ordered_no_fragment() -> Result<()> {
     assert_eq!(ppi, PayloadProtocolIdentifier::Binary, "unexpected ppi");
     assert_eq!(
         u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
-        0,
-        "unexpected received data"
+        1,
+        "the dropped first message must not be retransmitted"
     );
-
-    let (n, ppi) = s1.read_sctp(&mut buf).await?;
-    assert_eq!(n, sbuf.len(), "unexpected length of received data");
-    assert_eq!(ppi, PayloadProtocolIdentifier::Binary, "unexpected ppi");
-    assert_eq!(u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]), 1);
 
     log::debug!("process");
     br.process().await;
@@ -880,7 +875,7 @@ async fn test_assoc_unreliable_rexmit_ordered_fragment() -> Result<()> {
         let mut a = a0.association_internal.lock().await;
         a.rto_mgr.set_rto(100, true);
     }
-    // The service-compatible Werift sender treats Rexmit=0 as reliable.
+    // Zero retries: the dropped first message must not be recovered.
     s0.set_reliability_params(false, ReliabilityType::Rexmit, 0);
     s1.set_reliability_params(false, ReliabilityType::Rexmit, 0); // doesn't matter
 
@@ -915,14 +910,9 @@ async fn test_assoc_unreliable_rexmit_ordered_fragment() -> Result<()> {
     assert_eq!(ppi, PayloadProtocolIdentifier::Binary, "unexpected ppi");
     assert_eq!(
         u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
-        0,
-        "unexpected received data"
+        1,
+        "the dropped first message must not be retransmitted"
     );
-
-    let (n, ppi) = s1.read_sctp(&mut buf).await?;
-    assert_eq!(n, sbuf.len(), "unexpected length of received data");
-    assert_eq!(ppi, PayloadProtocolIdentifier::Binary, "unexpected ppi");
-    assert_eq!(u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]), 1);
 
     //log::debug!("process");
     br.process().await;

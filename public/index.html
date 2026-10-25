@@ -2302,7 +2302,8 @@
       chart.reference = chart.result;
       chart.referenceDisplay = chart.result || 0;
       chart.peak = Math.max(chart.peak, chart.result || 0);
-      if (Number.isFinite(result.ms)) chart.durationMs = Math.max(chart.durationMs, result.ms);
+      const chartMs = Number.isFinite(result.chartDurationMs) ? result.chartDurationMs : result.ms;
+      if (Number.isFinite(chartMs)) chart.durationMs = Math.max(chart.durationMs, chartMs);
       chart.dirty = true;
       drawSpeedCharts();
     }
@@ -3338,6 +3339,7 @@
           actualSent: accounting.actualSent,
           sentSeqs: accounting.sentSlots,
           uploadReceived: downResult.uploadReceived,
+          probeTransport: downResult.probeTransport || null,
           uploadAcked: upSeen.size,
           samples: upSamples,
           rttSeqs: Array.from(upRtts, ([seq, rtt]) => ({
@@ -4160,9 +4162,9 @@
           const delta = totalBytes - lastBytes;
           const mbps = fmtMbps(Number(delta), dt);
           if (Number.isFinite(mbps) && now - started >= warmupMs) {
-            const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency, now - started);
+            const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency, now - started - warmupMs);
             samples.push(sample.rawValue);
-            sampleDetails.push({ value: sample.rawValue, bytes: Number(delta), elapsedMs: sample.elapsedMs, atMs: now - started });
+            sampleDetails.push({ value: sample.rawValue, bytes: Number(delta), elapsedMs: sample.elapsedMs, atMs: now - started - warmupMs });
           }
           lastAt = now;
           lastBytes = totalBytes;
@@ -4196,6 +4198,7 @@
           type: "result",
           bytes: totalBytes,
           ms: totalMs,
+          chartDurationMs: Math.max(0, totalMs - warmupMs),
           raw,
           stable,
           sampledStable,
@@ -4357,9 +4360,9 @@
           if (now - lastAt < (final ? sampleMs / 2 : 1)) return;
           const bytes = readBytes();
           const delta = Number(bytes - lastBytes);
-          const published = publishThroughputSample(history, lastAt, now, delta, concurrency, now - started, {source:"browser-queue"});
+          const published = publishThroughputSample(history, lastAt, now, delta, concurrency, now - started - warmupMs, {source:"browser-queue"});
           samples.push(published.rawValue);
-          sampleDetails.push({value: published.rawValue, bytes: delta, elapsedMs: published.elapsedMs, atMs: now - started});
+          sampleDetails.push({value: published.rawValue, bytes: delta, elapsedMs: published.elapsedMs, atMs: now - started - warmupMs});
           lastAt = now;
           lastBytes = bytes;
         }
@@ -4436,7 +4439,7 @@
         const samples = [], sampleDetails = [], history = [];
         let lastMs = 0, lastBytes = 0, stopped = false, measuring = false;
         self.postMessage({type:"phase", phase:"warmup"});
-        return {samples, sampleDetails, accept(stats) {
+        return {samples, sampleDetails, get durationMs() { return lastMs; }, accept(stats) {
           if (stopped) return;
           if (!stats || !Number.isSafeInteger(stats.bytes) || stats.bytes < 0
               || !Number.isSafeInteger(stats.measuredBytes) || stats.measuredBytes < 0
@@ -4453,10 +4456,10 @@
           if (at - lastMs < 50) return;
           if (!measuring) { measuring = true; self.postMessage({type:"phase",phase:"measuring"}); }
           const referenceValue = concurrency === 1 ? fmtMbps(bytes, at) : fmtMbps(stats.bytes, stats.elapsedMs);
-          const sample = publishThroughputSample(history, lastMs, at, bytes - lastBytes, concurrency, stats.elapsedMs,
+          const sample = publishThroughputSample(history, lastMs, at, bytes - lastBytes, concurrency, at,
             {source:"server-received", referenceValue});
           samples.push(sample.rawValue);
-          sampleDetails.push({value:sample.rawValue,bytes:bytes-lastBytes,elapsedMs:sample.elapsedMs,atMs:stats.elapsedMs,source:"server-received"});
+          sampleDetails.push({value:sample.rawValue,bytes:bytes-lastBytes,elapsedMs:sample.elapsedMs,atMs:at,transferAtMs:stats.elapsedMs,source:"server-received"});
           lastMs = at; lastBytes = bytes;
         }, stop() { stopped = true; }};
       }
@@ -4649,6 +4652,7 @@
           const bytes = results.reduce((sum, lane) => sum + lane.serverBytes, 0n);
           const stable = fmtMbps(Number(bytes), totalMs);
           self.postMessage({type: "result", bytes, ms: totalMs, raw: stable, stable,
+            chartDurationMs: progress ? sampler.durationMs : Math.max(0, totalMs - warmupMs),
             sampledStable: stableRate(sampler.samples), samples: sampler.samples, sampleDetails: sampler.sampleDetails,
             concurrency, lanes: results, fallback: chunked});
         } catch (error) {
@@ -5977,7 +5981,7 @@
         : "--";
     };
 
-    const STABILITY_ANALYSIS_VERSION = 2;
+    const STABILITY_ANALYSIS_VERSION = 3;
     let lastStabilityReport = null;
 
     async function runPairedStability(peer, rate, durationMs, sessionId, onProgress, onRttSample) {

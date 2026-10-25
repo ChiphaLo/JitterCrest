@@ -40,7 +40,7 @@ fn standalone_page_contains_browser_contracts_and_live_speed_charts() {
 #[test]
 fn speed_timestamps_and_runtime_placeholders_are_preserved() {
     for marker in [
-        "concurrency, now - started)",
+        "concurrency, now - started - warmupMs)",
         "at - measurementStartAt",
         "function createUploadSampler(",
         "function validateUploadAccounting(",
@@ -60,7 +60,7 @@ fn speed_timestamps_and_runtime_placeholders_are_preserved() {
 #[test]
 fn stability_analysis_preserves_identities_and_unknown_attribution() {
     for marker in [
-        "const STABILITY_ANALYSIS_VERSION = 2;",
+        "const STABILITY_ANALYSIS_VERSION = 3;",
         "paired.up.seenSeqs || []",
         "upAckedAt.set(msg.seq, ackedAt)",
         "pacing: analyzePacing(accounting.sentTimes, 1000 / rate)",
