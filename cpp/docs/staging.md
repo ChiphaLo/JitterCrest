@@ -62,5 +62,8 @@ installed into the system trust store. Caddy config/data/certificates are confin
 to the test temporary directory and all child services stop afterward.
 
 This validates a local direct TLS/proxy UI profile, not a public deployment,
-central-UI-to-separate-agent cross-origin matrix, production firewall, rollback
-or effective systemd hardening. Those scopes still require separate evidence.
+production firewall, rollback or effective systemd hardening. A subsequent local
+central-UI-to-separate-agent **cross-site HTTPS IP** matrix passed all four
+Rust/C++ UI/agent combinations in Release, ASan/UBSan and TSan profiles; see
+`agent-resource-validation.md`. Successful publicly mapped probe-only
+connectivity and real public deployment still require separate evidence.

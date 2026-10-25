@@ -19,9 +19,9 @@ from playwright.sync_api import sync_playwright
 from http_contract import Server, allocate_port
 
 
-def request(port, method, path, body=None, headers=None, context=None):
+def request(port, method, path, body=None, headers=None, context=None, host="localhost"):
     if context:
-        connection = http.client.HTTPSConnection("localhost", port, context=context, timeout=6)
+        connection = http.client.HTTPSConnection(host, port, context=context, timeout=6)
     else:
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=6)
     try:

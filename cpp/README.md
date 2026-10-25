@@ -27,6 +27,11 @@ leads most measured payload throughput cases; C++ has some lightweight-request
 and high-concurrency RSS advantages. These are local results, not Internet
 measurements or evidence authorizing a production replacement.
 
+The central-UI/independent-agent HTTPS IP and finite resource-exhaustion matrix
+is documented in `docs/agent-resource-validation.md`. All four Rust/C++ UI/agent
+combinations passed in Release, ASan/UBSan and TSan profiles; positive public-NAT
+probe-only connectivity and the remaining acceptance gates are still pending.
+
 ## Architecture and boundaries
 
 - C++20 pure core: owned 128-byte little-endian frames, UTF-16-compatible ID hash,
@@ -182,13 +187,15 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 
 ## Remaining acceptance work (not yet achieved)
 
-1. Complete the remaining HTTP security/edge-case and resource-exhaustion matrix
-   beyond the tested milestone; complete probe-only profile and live TLS/proxy
-   verification. External provider behavior was tested with injected deterministic
+1. Extend the remaining HTTP/native RTC security/edge-case and resource-exhaustion
+   matrix beyond the finite admission/reset/progress/socket-cap tests now passed;
+   complete successful publicly mapped probe-only connectivity. Cross-site central
+   UI-to-agent HTTPS IP, CORS/CSP and browser RTT/payloads are now tested locally.
+   External provider behavior was tested with injected deterministic
    fixtures, not declared validated against every third-party response.
 2. Extend and complete acceptance of the implemented native WebRTC session
    limits, cancellation/tombstones, zero-retry probes, scheduler/grace accounting,
-   result fragmentation and actual UI/agent/probe-only browser integration.
+   result fragmentation and the remaining probe-only/public browser integration.
 3. Debug/Release plus all required sanitizer/static-analysis gates for the full
    service; malicious/slow/half-close/disconnect/reconnect/concurrency cases.
 4. Shared Rust/C++ offline and HTTP/browser contracts, including UI/agent and

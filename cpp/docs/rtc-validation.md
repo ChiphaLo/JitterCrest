@@ -152,8 +152,10 @@ cleanup/executor failures and requires clean bounded process exits.
 - Two remaining unsuppressed network Clang-Tidy diagnostics in Boost 1.83
   coroutine internals (`awaitable.hpp:171` and `:508`), and
   complete resource/timeouts/cancellation/agent/probe-only coverage. Local Caddy
-  HTTP/TLS and actual UI Restart/RTT tests pass (see `staging.md`); separate
-  central-UI-to-agent TLS and public deployment are not yet validated.
+  HTTP/TLS and actual UI Restart/RTT tests pass (see `staging.md`). The separate
+  cross-site central-UI-to-agent HTTPS IP matrix now passes in three C++ profiles
+  (see `agent-resource-validation.md`); successful mapped probe-only connectivity
+  and public deployment remain unverified.
 - Reproducible staging bundle and complete dependency/toolchain manifest.
 - Local alternating Release/ThinLTO core and HTTP benchmarks, CPU/RSS/tails,
   accepted connections and five-minute mixed traffic are now measured in
