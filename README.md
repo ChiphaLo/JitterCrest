@@ -195,6 +195,30 @@ Optional checks: `python tests/throughput_worker.py`,
 `python tests/chart_render_math.py`, `python tests/rtt_percentile_plot.py`, and
 `python tests/browser_speed_charts.py`.
 
+## Stability analysis v2
+
+The stability report preserves actual probe sequences, ACK sets and upload
+send/ACK timestamps instead of reconstructing identities from array positions.
+Final plots retain the same sequences as live plots. Upload pacing is measured;
+reorder observations preserve the existing RTT-at-most-200-ms qualification.
+
+Burst metrics group missing probes **or** RTTs above 200 ms; their concentration
+uses that same population in both numerator and denominator. Packet-loss rate
+and the green reception-density chart still count genuinely missing probes only.
+A late-but-received probe is not silently reclassified as actual packet loss.
+
+The timeline explicitly labels its horizontal coordinate as probe sequence.
+Its points are not throughput-chart interpolation: a batch of nearly simultaneous
+ACKs can naturally form a descending RTT ramp. Genuine high RTT values remain.
+Per-packet local-versus-network attribution is not measured by this protocol;
+the UI says `not measured`, exports null local-delay quantities and records
+`networkOriginConfirmed: false`. Aggregate browser timer and server executor
+observations are separate diagnostics, not proof of a packet's delay origin.
+Legacy `networkSpikes` export fields remain for compatibility and must be read
+with the attribution metadata, not as a confirmed network-origin verdict.
+
+Regression check: `python tests/stability_analysis.py`.
+
 ## Architecture and limitations
 
 - HTTP: fixed 10 KiB/100 KiB/1 MiB payloads, bounded streams, upload accounting,

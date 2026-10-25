@@ -765,17 +765,17 @@
                       <div class="stability-metric-item"><span>Local Delay</span><strong id="stUpLocalDelay">--</strong></div>
                     </div>
                   </div>
-                  <!-- Packet Loss Burst Detector -->
+                  <!-- Packet Missing / Late Burst Detector -->
                   <div class="stability-col">
-                    <h4>Loss Burst Detector</h4>
+                    <h4>Missing / Late Burst Detector</h4>
                     <div class="stability-metrics-list">
                       <div class="stability-metric-item"><span>Total Lost / Rate</span><strong id="stUpLossRate">--</strong></div>
                       <div class="stability-metric-item"><span>Packet Loss Rate</span><strong id="stUpPacketLossRate">--</strong></div>
                       <div class="stability-metric-item"><span>Reorder Rate</span><strong id="stUpReorderRate">--</strong></div>
-                      <div class="stability-metric-item"><span>Loss Burst Count</span><strong id="stUpBurstCount">--</strong></div>
-                      <div class="stability-metric-item"><span>Max Consecutive Loss</span><strong id="stUpMaxConsec">--</strong></div>
+                      <div class="stability-metric-item"><span>Missing / Late Bursts</span><strong id="stUpBurstCount">--</strong></div>
+                      <div class="stability-metric-item"><span>Max Consecutive Missing / Late</span><strong id="stUpMaxConsec">--</strong></div>
                       <div class="stability-metric-item"><span>Max Burst Duration</span><strong id="stUpMaxBurstDur">--</strong></div>
-                      <div class="stability-metric-item"><span>Loss Concentration</span><strong id="stUpConcentration">--</strong></div>
+                      <div class="stability-metric-item"><span>Missing / Late Concentration</span><strong id="stUpConcentration">--</strong></div>
                     </div>
                   </div>
                 </div>
@@ -814,17 +814,17 @@
                       <div class="stability-metric-item"><span>Local Delay</span><strong id="stDownLocalDelay">--</strong></div>
                     </div>
                   </div>
-                  <!-- Packet Loss Burst Detector -->
+                  <!-- Packet Missing / Late Burst Detector -->
                   <div class="stability-col">
-                    <h4>Loss Burst Detector</h4>
+                    <h4>Missing / Late Burst Detector</h4>
                     <div class="stability-metrics-list">
                       <div class="stability-metric-item"><span>Total Lost / Rate</span><strong id="stDownLossRate">--</strong></div>
                       <div class="stability-metric-item"><span>Packet Loss Rate</span><strong id="stDownPacketLossRate">--</strong></div>
                       <div class="stability-metric-item"><span>Reorder Rate</span><strong id="stDownReorderRate">--</strong></div>
-                      <div class="stability-metric-item"><span>Loss Burst Count</span><strong id="stDownBurstCount">--</strong></div>
-                      <div class="stability-metric-item"><span>Max Consecutive Loss</span><strong id="stDownMaxConsec">--</strong></div>
+                      <div class="stability-metric-item"><span>Missing / Late Bursts</span><strong id="stDownBurstCount">--</strong></div>
+                      <div class="stability-metric-item"><span>Max Consecutive Missing / Late</span><strong id="stDownMaxConsec">--</strong></div>
                       <div class="stability-metric-item"><span>Max Burst Duration</span><strong id="stDownMaxBurstDur">--</strong></div>
-                      <div class="stability-metric-item"><span>Loss Concentration</span><strong id="stDownConcentration">--</strong></div>
+                      <div class="stability-metric-item"><span>Missing / Late Concentration</span><strong id="stDownConcentration">--</strong></div>
                     </div>
                   </div>
                 </div>
@@ -3133,6 +3133,11 @@
       const downRtts = new Map();
       const upSeen = new Set();
       const downSeen = new Set();
+      const upSentAt = new Map();
+      const upAckedAt = new Map();
+      const upReorderedSeqs = new Set();
+      const downReorderedSeqs = new Set();
+      let downMaxSeq = -1;
       let readyResolve;
       let readyReject;
       let resultResolve;
@@ -3228,17 +3233,25 @@
       const onTestMessage = (event) => {
         const msg = decodeRtcFrame(event.data);
         if (!msg || msg.sessionHash !== sessionHash || msg.testHash !== testHash) return;
-        if (msg.kind === RTC_KIND.upAck && scheduler && scheduler.getSentSlots().includes(msg.seq)) {
+        if (msg.kind === RTC_KIND.upAck && upSentAt.has(msg.seq)) {
           if (!upSeen.has(msg.seq)) {
             upSeen.add(msg.seq);
-            const rtt = performance.now() - msg.sentAt;
+            const ackedAt = performance.now();
+            const rtt = ackedAt - upSentAt.get(msg.seq);
             upRtts.set(msg.seq, rtt);
+            upAckedAt.set(msg.seq, ackedAt);
+            // Preserve the historical <=200ms reorder qualification.
+            if (msg.reordered && rtt <= 200) upReorderedSeqs.add(msg.seq);
             if (options.onUploadSample) options.onUploadSample(rtt, msg.seq);
           }
           return;
         }
         if (msg.kind === RTC_KIND.down && peer.test.readyState === "open") {
-          if (!downSeen.has(msg.seq)) downSeen.add(msg.seq);
+          if (!downSeen.has(msg.seq)) {
+            downSeen.add(msg.seq);
+            if (msg.seq < downMaxSeq) downReorderedSeqs.add(msg.seq);
+            downMaxSeq = Math.max(downMaxSeq, msg.seq);
+          }
           peer.test.send(encodeRtcFrame(RTC_KIND.downAck, 0, sessionHash, testHash, msg.seq, msg.sentAt));
           return;
         }
@@ -3271,7 +3284,9 @@
           intervalMs: 1000 / rate,
           send: (seq) => {
             if (peer.test.readyState !== "open") return false;
-            peer.test.send(encodeRtcFrame(RTC_KIND.up, 0, sessionHash, testHash, seq, performance.now()));
+            const sentAt = performance.now();
+            peer.test.send(encodeRtcFrame(RTC_KIND.up, 0, sessionHash, testHash, seq, sentAt));
+            upSentAt.set(seq, sentAt);
             return true;
           },
         }));
@@ -3325,9 +3340,17 @@
           uploadReceived: downResult.uploadReceived,
           uploadAcked: upSeen.size,
           samples: upSamples,
+          rttSeqs: Array.from(upRtts, ([seq, rtt]) => ({
+            seq, rtt, sentAtMs: upSentAt.get(seq), ackedAtMs: upAckedAt.get(seq),
+          })).sort((a, b) => a.seq - b.seq),
+          seenSeqs: Array.from(upSeen),
+          reordered: upReorderedSeqs.size,
+          pacing: analyzePacing(accounting.sentTimes, 1000 / rate),
           received: upSeen.size,
           acked: upSeen.size,
         };
+        const finalDownSamples = downResult.samples || downSamples;
+        const downRttBySeq = new Map(finalDownSamples.map(sample => [sample.seq, sample.rtt]));
         const down = {
           ...downResult,
           ...ids,
@@ -3335,7 +3358,12 @@
           downResultReceived: true,
           received: downResult.received,
           acked: downResult.acked,
-          samples: downResult.samples || downSamples,
+          samples: finalDownSamples,
+          rttSeqs: finalDownSamples,
+          seenSeqs: finalDownSamples.map(sample => sample.seq),
+          probeReceivedSeqs: Array.from(downSeen),
+          reordered: Array.from(downReorderedSeqs).filter(seq =>
+            Number.isFinite(downRttBySeq.get(seq)) && downRttBySeq.get(seq) <= 200).length,
         };
         return { up, down, rawDownSamples: downSamples };
       } finally {
@@ -5543,6 +5571,10 @@
       var maxSeq = 0;
       for (var i = 0; i < samples.length; i++) { if (samples[i].seq > maxSeq) maxSeq = samples[i].seq; }
       var totalPackets = xTotal || maxSeq + 1;
+      ctx.fillStyle = theme.label;
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Probe sequence (0–" + Math.max(0, totalPackets - 1) + ")", w / 2, h - 4);
 
       ctx.strokeStyle = theme.grid;
       ctx.lineWidth = 1;
@@ -5922,11 +5954,14 @@
         $(prefix + "MaxConsec").textContent = loss.maxBurstPackets + " pkts";
         $(prefix + "MaxBurstDur").textContent = loss.maxBurstDurationMs.toFixed(1) + " ms";
 
-        const concentration = loss.missingPackets ? Math.round((loss.maxBurstPackets / loss.missingPackets) * 100) : 0;
+        const concentration = loss.dropEquivalentPackets
+          ? Math.round((loss.maxBurstPackets / loss.dropEquivalentPackets) * 100) : 0;
         $(prefix + "Concentration").textContent = concentration + "% in single run";
       }
       
-      if (loss) {
+      if (snapshot && snapshot.localDelayMeasured === false) {
+        $(prefix + "LocalDelay").textContent = "not measured";
+      } else if (loss) {
         $(prefix + "LocalDelay").textContent = loss.localDelayedPackets > 0 || (snapshot && snapshot.handlerDelayEvents > 0)
           ? "events: " + (snapshot ? snapshot.handlerDelayEvents : "?") + ", pkts: " + loss.localDelayedPackets
           : "none";
@@ -5942,6 +5977,7 @@
         : "--";
     };
 
+    const STABILITY_ANALYSIS_VERSION = 2;
     let lastStabilityReport = null;
 
     async function runPairedStability(peer, rate, durationMs, sessionId, onProgress, onRttSample) {
@@ -5981,8 +6017,10 @@
         lossRate: measurement.actualSent ? Math.max(0, measurement.actualSent - seenSeqs.length) / measurement.actualSent : 0,
         seenSeqs,
         sentSeqs,
-        rttSeqs: samples.map((item, index) => ({ seq: item && Number.isInteger(item.seq) ? item.seq : index, rtt: item && typeof item === "object" ? item.rtt : item })),
-        reordered: 0,
+        rttSeqs: (measurement.rttSeqs || samples).filter(item =>
+          item && Number.isInteger(item.seq) && Number.isFinite(item.rtt))
+          .map(item => ({ ...item })).sort((a, b) => a.seq - b.seq),
+        reordered: measurement.reordered,
         pacing: measurement.pacing || null,
         packetAccounting: {
           planned: measurement.planned,
@@ -5997,13 +6035,13 @@
         paired.up,
         paired.up.samples || [],
         paired.up.sentSeqs || [],
-        Array.from(new Set((paired.up.sentSeqs || []).slice(0, paired.up.uploadAcked || 0))),
+        paired.up.seenSeqs || [],
       );
       const down = toDirection(
         paired.down,
         paired.down.samples || [],
         paired.down.sentSeqs || [],
-        (paired.down.samples || []).map((sample) => sample && sample.seq).filter(Number.isInteger),
+        paired.down.seenSeqs || [],
       );
       const snapshot = {
         upSent: up.sent,
@@ -6016,8 +6054,10 @@
         downSentSeqs: new Set(down.sentSeqs),
         upRtts: new Map(up.rttSeqs.map((sample) => [sample.seq, sample.rtt])),
         downRtts: new Map(down.rttSeqs.map((sample) => [sample.seq, sample.rtt])),
-        upReordered: 0,
-        downReordered: 0,
+        upReordered: up.reordered,
+        downReordered: down.reordered,
+        // Arrival gaps/batches cannot causally identify per-packet local delay.
+        localDelayMeasured: false,
         upLocalDelayedSeqs: new Set(),
         downLocalDelayedSeqs: new Set(),
         handlerDelayEvents: 0,
@@ -6103,7 +6143,7 @@
           globalThis.__speedtestEvidence = {
             ...(globalThis.__speedtestEvidence || {}),
             phase: "stability-incomplete",
-            stability: { upload: result.up, download: result.down, validation: stabilityValidation },
+            stability: { analysisVersion: STABILITY_ANALYSIS_VERSION, upload: result.up, download: result.down, validation: stabilityValidation },
           };
           $("stabilityStatus").textContent = "Stability Test (Incomplete)";
           $("stabilityErrorDetails").textContent = diagnostic + " Values are diagnostic only.";
@@ -6114,7 +6154,7 @@
         globalThis.__speedtestEvidence = {
           ...(globalThis.__speedtestEvidence || {}),
           phase: "stability-complete",
-          stability: { upload: result.up, download: result.down, validation: stabilityValidation },
+          stability: { analysisVersion: STABILITY_ANALYSIS_VERSION, upload: result.up, download: result.down, validation: stabilityValidation },
         };
         $("stabilityErrorDetails").hidden = true;
         $("stabilityErrorDetails").textContent = "";
@@ -6137,6 +6177,7 @@
           downReordered: result.down.reordered || 0,
           upLocalDelayedSeqs: result.snapshot ? result.snapshot.upLocalDelayedSeqs : null,
           downLocalDelayedSeqs: result.snapshot ? result.snapshot.downLocalDelayedSeqs : null,
+          localDelayMeasured: result.snapshot ? result.snapshot.localDelayMeasured === true : false,
           handlerDelayEvents: result.snapshot ? result.snapshot.handlerDelayEvents : 0,
           handlerDelayedPackets: result.snapshot ? result.snapshot.handlerDelayedPackets : 0,
           upPacing: result.up.pacing || null,
@@ -6147,13 +6188,17 @@
         applyLiveStabilityAnalysis(finalAnalysis, total, finalSnapshot);
         // Build lastStabilityReport for JSON export
         lastStabilityReport = {
+          analysisVersion: STABILITY_ANALYSIS_VERSION,
           node: { id: selectedNode.id, label: selectedNode.label, base: selectedNode.base },
           timestamp: Date.now(),
           parameters: { rate: rate, requestedRate: requestedRate, autoAdjusted: rate !== requestedRate, durationSeconds: durationMs / 1000, plannedPackets: total },
+          attribution: { localDelayMeasured: finalSnapshot.localDelayMeasured, networkOriginConfirmed: false },
           localDelay: {
-            events: finalSnapshot.handlerDelayEvents || 0,
-            affectedPackets: finalSnapshot.handlerDelayedPackets || 0,
-            affectedRate: finalSnapshot.totalReceived ? (finalSnapshot.handlerDelayedPackets || 0) / finalSnapshot.totalReceived : 0,
+            measured: finalSnapshot.localDelayMeasured,
+            events: finalSnapshot.localDelayMeasured ? finalSnapshot.handlerDelayEvents : null,
+            affectedPackets: finalSnapshot.localDelayMeasured ? finalSnapshot.handlerDelayedPackets : null,
+            affectedRate: finalSnapshot.localDelayMeasured && finalSnapshot.totalReceived
+              ? finalSnapshot.handlerDelayedPackets / finalSnapshot.totalReceived : null,
             thresholdMs: handlerDelayThreshold(packetIntervalMs)
           },
           timerQuality: timerQuality,
@@ -6167,8 +6212,10 @@
             packetLossRate: finalAnalysis.upLoss.lossRate,
             reorderRate: safeRate(finalAnalysis.upLoss.reordered || 0, finalAnalysis.upLoss.totalSent),
             localDelay: {
-              packets: finalSnapshot.upLocalDelayedSeqs ? finalSnapshot.upLocalDelayedSeqs.size : 0,
-              rate: result.up.received ? (finalSnapshot.upLocalDelayedSeqs ? finalSnapshot.upLocalDelayedSeqs.size : 0) / result.up.received : 0
+              measured: finalSnapshot.localDelayMeasured,
+              packets: finalSnapshot.localDelayMeasured ? finalSnapshot.upLocalDelayedSeqs.size : null,
+              rate: finalSnapshot.localDelayMeasured && result.up.received
+                ? finalSnapshot.upLocalDelayedSeqs.size / result.up.received : null
             }
           },
           download: {
@@ -6181,8 +6228,10 @@
             packetLossRate: finalAnalysis.downLoss.lossRate,
             reorderRate: safeRate(finalAnalysis.downLoss.reordered || 0, finalAnalysis.downLoss.totalSent),
             localDelay: {
-              packets: finalSnapshot.downLocalDelayedSeqs ? finalSnapshot.downLocalDelayedSeqs.size : 0,
-              rate: result.down.received ? (finalSnapshot.downLocalDelayedSeqs ? finalSnapshot.downLocalDelayedSeqs.size : 0) / result.down.received : 0
+              measured: finalSnapshot.localDelayMeasured,
+              packets: finalSnapshot.localDelayMeasured ? finalSnapshot.downLocalDelayedSeqs.size : null,
+              rate: finalSnapshot.localDelayMeasured && result.down.received
+                ? finalSnapshot.downLocalDelayedSeqs.size / result.down.received : null
             }
           }
         };

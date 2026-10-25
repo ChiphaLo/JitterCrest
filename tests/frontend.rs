@@ -56,6 +56,28 @@ fn speed_timestamps_and_runtime_placeholders_are_preserved() {
     }
 }
 
+#[cfg(feature = "web-ui")]
+#[test]
+fn stability_analysis_preserves_identities_and_unknown_attribution() {
+    for marker in [
+        "const STABILITY_ANALYSIS_VERSION = 2;",
+        "paired.up.seenSeqs || []",
+        "upAckedAt.set(msg.seq, ackedAt)",
+        "pacing: analyzePacing(accounting.sentTimes, 1000 / rate)",
+        "localDelayMeasured: false",
+        "networkOriginConfirmed: false",
+        "loss.maxBurstPackets / loss.dropEquivalentPackets",
+        "not measured",
+        "Probe sequence (0–",
+    ] {
+        assert!(
+            PAGE.contains(marker),
+            "missing stability contract: {marker}"
+        );
+    }
+    assert!(!PAGE.contains("slice(0, paired.up.uploadAcked"));
+}
+
 struct RunningServer(Child);
 
 impl Drop for RunningServer {
