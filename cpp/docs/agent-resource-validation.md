@@ -138,8 +138,10 @@ fixture reports are retained privately; they are not relabeled passing runs.
 
 ## Remaining gates
 
-Two unsuppressed Boost coroutine static-analysis diagnostics, broader native RTC
-resource/timeout coverage, successful mapped probe-only connectivity, real-network
+The two unsuppressed Boost coroutine diagnostics now have a reduced fixture and
+documented model/lifetime classification in `coroutine-analysis.md`; the raw
+command is still not claimed clean. Broader native RTC resource/timeout coverage,
+successful mapped probe-only connectivity, real-network
 measurements, a reproducible complete release/dependency bundle and the final
 requirement-by-requirement audit remain open. A requested later merge/production
 deployment must wait for those gates; this milestone does not bypass them.

@@ -32,6 +32,12 @@ is documented in `docs/agent-resource-validation.md`. All four Rust/C++ UI/agent
 combinations passed in Release, ASan/UBSan and TSan profiles; positive public-NAT
 probe-only connectivity and the remaining acceptance gates are still pending.
 
+The two remaining Clang18/Boost coroutine diagnostics now have an exact reduced
+fixture, AST/CFG evidence, known-bad controls and a four-profile runtime lifetime
+test; see `docs/coroutine-analysis.md`. The raw full-service Tidy command still
+reports those two findings and is **not** mislabeled a clean pass. No checker or
+warning was suppressed to obtain this classification.
+
 ## Architecture and boundaries
 
 - C++20 pure core: owned 128-byte little-endian frames, UTF-16-compatible ID hash,

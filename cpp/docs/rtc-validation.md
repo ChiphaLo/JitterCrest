@@ -150,7 +150,10 @@ cleanup/executor failures and requires clean bounded process exits.
 - Final broad acceptance beyond the passing snapshots below; earlier failures
   are retained, not overwritten as successful results.
 - Two remaining unsuppressed network Clang-Tidy diagnostics in Boost 1.83
-  coroutine internals (`awaitable.hpp:171` and `:508`), and
+  coroutine internals (`awaitable.hpp:171` and `:508`) now have an exact reduced
+  reproducer, AST/CFG and lifetime-model audit in `coroutine-analysis.md`.
+  They are classified as scoped modeling false positives, not hidden or claimed
+  to be a clean raw Tidy pass. Also remaining:
   complete resource/timeouts/cancellation/agent/probe-only coverage. Local Caddy
   HTTP/TLS and actual UI Restart/RTT tests pass (see `staging.md`). The separate
   cross-site central-UI-to-agent HTTPS IP matrix now passes in three C++ profiles
@@ -169,7 +172,9 @@ The earlier HTTP snapshot's two Beast parser diagnostics were eliminated by
 selecting its contiguous `const_buffer` overload for the owned normalized header.
 This avoids the generic mutable-buffer-sequence stack copy; parsing is still
 synchronous and the string remains alive. No safety warning is suppressed. The
-two coroutine diagnostics still require a documented modeling/lifetime audit.
+two coroutine diagnostics' subsequent documented modeling/lifetime audit and
+runtime/negative-control evidence are in `coroutine-analysis.md`; the raw
+full-service command remains nonzero.
 
 ## Latest patched-transport verification
 

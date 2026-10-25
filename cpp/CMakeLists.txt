@@ -83,6 +83,10 @@ add_test(NAME rtc_upload_complete_reasons COMMAND speedtest-rtc-validation-test)
 add_executable(speedtest-executor-refcount-test tests/executor_refcount_test.cpp)
 target_link_libraries(speedtest-executor-refcount-test PRIVATE speedtest_core)
 add_test(NAME asio_executor_refcount_release COMMAND speedtest-executor-refcount-test)
+add_executable(speedtest-coroutine-lifetime-test tests/coroutine_analysis_fixture.cpp tests/coroutine_lifetime_test.cpp)
+target_link_libraries(speedtest-coroutine-lifetime-test PRIVATE speedtest_core)
+target_compile_options(speedtest-coroutine-lifetime-test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Werror)
+add_test(NAME asio_coroutine_runtime_lifetime COMMAND speedtest-coroutine-lifetime-test)
 
 set(SHARED_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/../public" CACHE PATH "Unmodified shared frontend")
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"

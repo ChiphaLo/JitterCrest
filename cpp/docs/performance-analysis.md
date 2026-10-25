@@ -119,8 +119,7 @@ maintenance burden. Local results are descriptive; three/five rounds and WSL
 noise do not justify a population-level significance claim.
 
 Real-network end-to-end benchmarking, remaining native RTC resource/timeouts,
-successful publicly mapped probe-only acceptance, two unresolved coroutine
-static-analysis diagnostics, a complete staging bundle and final acceptance
+successful publicly mapped probe-only acceptance, a complete staging bundle and final acceptance
 audit remain open. Production routes, services and historical archives are
 untouched. This is a completed **local benchmark milestone**, not completion of
 the full C++ refactor or authorization for a cutover.
@@ -128,3 +127,5 @@ the full C++ refactor or authorization for a cutover.
 Subsequent local central-UI-to-separate-agent HTTPS IP and finite HTTP resource
 acceptance is recorded in `agent-resource-validation.md`; it does not alter the
 measurements or the performance conclusion above.
+The two raw coroutine analyzer findings now have a documented reduced-case and
+lifetime/model classification in `coroutine-analysis.md`, not a clean Tidy claim.
