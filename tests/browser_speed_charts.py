@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                       this.record = {kind: null, samples: [], result: null, error: null};
                       globalThis.__workerRecords.push(this.record);
                       this.addEventListener('message', ({data}) => {
-                        if (data.type === 'sample') this.record.samples.push({value: data.value, atMs: data.atMs});
+                        if (data.type === 'sample') this.record.samples.push({value: data.value, atMs: data.atMs, source: data.source});
                         if (data.type === 'result') this.record.result = {
                           stable: data.stable, bytes: String(data.bytes), ms: data.ms,
                           queued: String(data.clientBytesQueued || ''), totalBytes: String(data.totalBytes || '')};
@@ -119,6 +119,7 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 page.on('pageerror', lambda error: evidence['page_errors'].append(str(error)))
                 cdp = context.new_cdp_session(page)
                 cdp.send('Network.enable')
+                cdp.send('Performance.enable')
                 cdp.send('Network.emulateNetworkConditions', {'offline': False, 'latency': args.latency_ms,
                     'downloadThroughput': args.download_mbps * 1e6 / 8, 'uploadThroughput': args.upload_mbps * 1e6 / 8})
                 # Existing loopback-only hook skips unrelated RTC startup, not the speed workers.
@@ -129,14 +130,29 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 page.eval_on_selector('#run', 'button => { button.disabled = false; button.click(); }')
                 page.wait_for_function("() => Number(document.querySelector('#downloadSpeedChart svg').dataset.sampleCount) >= 3 || document.getElementById('phase').textContent === 'Speed error'", timeout=25000)
                 assert page.locator('#phase').inner_text() != 'Speed error', page.locator('#log').inner_text()
-                assert page.locator('#downloadSpeedChart .speed-result-line').count() == 0
+                assert page.locator('#downloadSpeedChart .speed-result-line').get_attribute('data-provisional') == 'true'
                 evidence['download_live_before_final'] = True
+                before = page.evaluate('() => __speedtestChartDiagnostics().download')
+                perf_before = {m['name']: m['value'] for m in cdp.send('Performance.getMetrics')['metrics']}
+                page.wait_for_timeout(1000)
+                after = page.evaluate('() => __speedtestChartDiagnostics().download')
+                perf_after = {m['name']: m['value'] for m in cdp.send('Performance.getMetrics')['metrics']}
+                evidence['main_thread_one_second'] = {k: perf_after[k]-perf_before[k] for k in ['Timestamp','TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount']}
+                evidence['download_frames_per_second'] = after['frames'] - before['frames']
+                assert evidence['download_frames_per_second'] >= 30
+                assert after['axisBuilds'] < after['frames'] / 3
                 page.locator('#speedTestContainer').screenshot(path=str(args.output / 'live.png'))
                 page.wait_for_function("() => document.querySelector('#downloadSpeedChart .speed-result-line') && Number(document.querySelector('#uploadSpeedChart svg').dataset.sampleCount) >= 3", timeout=30000)
-                assert page.locator('#uploadSpeedChart .speed-result-line').count() == 0
+                assert page.locator('#uploadSpeedChart .speed-result-line').get_attribute('data-provisional') == 'true'
                 evidence['upload_live_before_final'] = True
+                page.wait_for_function("() => Number(document.querySelector('#uploadSpeedChart svg').dataset.sampleCount) >= 60",timeout=15000)
+                assert page.locator('#uploadSpeedChart .speed-result-line').get_attribute('data-provisional') == 'true'
+                page.locator('#uploadSpeedChart').screenshot(path=str(args.output / 'upload-live.png'))
                 page.wait_for_function("() => ['Speed complete','Speed error'].includes(document.getElementById('phase').textContent)", timeout=30000)
                 assert page.locator('#phase').inner_text() == 'Speed complete', page.locator('#log').inner_text()
+                page.wait_for_function("() => [...document.querySelectorAll('.speed-result-line')].every(line => line.dataset.provisional === 'false')")
+                evidence['render_diagnostics'] = page.evaluate('() => __speedtestChartDiagnostics()')
+                assert evidence['render_diagnostics']['upload']['sources'] == ['server-received']
                 evidence['workers'] = page.evaluate('() => globalThis.__workerRecords')
                 evidence['charts'] = page.evaluate('''() => ['download','upload'].map(kind => {
                   const chart = document.getElementById(kind + 'SpeedChart');
@@ -149,7 +165,7 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 # Retain diagnostics even if a subsequent rendering assertion fails.
                 (args.output / 'result.json').write_text(json.dumps(evidence, indent=2), encoding='utf8')
                 for chart in evidence['charts']:
-                    assert 10 <= chart['samples'] <= 512 and chart['horizontal'] and chart['dashed'] == '6 4'
+                    assert 50 <= chart['samples'] <= 2048 and chart['horizontal'] and chart['dashed'] == '6 4'
                     assert abs(chart['result'] - chart['display']) <= 0.0051 and chart['timeAxis']
                 page.locator('#speedTestContainer').screenshot(path=str(args.output / 'desktop.png'))
                 page.set_viewport_size({'width': 390, 'height': 844})
@@ -159,11 +175,11 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 page.emulate_media(color_scheme='dark')
                 page.locator('#speedTestContainer').screenshot(path=str(args.output / 'mobile-dark.png'))
                 page.eval_on_selector('#run', 'button => button.click()')
-                assert page.locator('.speed-result-line').count() == 0
-                assert page.locator('#uploadSpeedChart svg').get_attribute('data-sample-count') == '0'
+                assert page.locator('.speed-result-line[data-result-mbps]').count() == 0
+                page.wait_for_function("() => document.querySelector('#uploadSpeedChart svg').dataset.sampleCount === '0'")
                 page.reload()
                 page.wait_for_selector('#downloadSpeedChart svg')
-                assert page.locator('.speed-result-line').count() == 0
+                assert page.locator('.speed-result-line[data-result-mbps]').count() == 0
                 assert page.locator('#downloadSpeedChart svg').get_attribute('data-sample-count') == '0'
                 assert not evidence['page_errors'], evidence['page_errors']
                 evidence['reset_verified'] = True
@@ -173,7 +189,7 @@ with tempfile.TemporaryDirectory(prefix='loopback-', dir=temporary_root) as temp
                 child.terminate()
                 child.wait(timeout=10)
 (args.output / 'result.json').write_text(json.dumps(evidence, indent=2), encoding='utf8')
-summary = {key: value for key, value in evidence.items() if key != 'workers'}
+summary = {key: value for key, value in evidence.items() if key not in ('workers', 'render_diagnostics')}
 summary['worker_summaries'] = [{
     'kind': worker['kind'], 'samples': len(worker['samples']),
     'zero_samples': sum(sample['value'] == 0 for sample in worker['samples']),

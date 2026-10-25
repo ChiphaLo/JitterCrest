@@ -8,6 +8,11 @@ readme = "README.md"
 edition = "2024"
 rust-version = "1.96"
 
+[features]
+# The default standalone site adds UI assets to the measurement-only agent.
+default = ["web-ui"]
+web-ui = []
+
 [dependencies]
 anyhow = "1"
 async-stream = "0.3"

@@ -4,6 +4,7 @@ use crate::{
     limits::{Direction, Lease, Limits},
     rtc::RtcService,
     transport::ConnInfo,
+    upload_progress::{Mode, Receipt, Registry},
 };
 use async_stream::stream;
 use axum::{
@@ -23,7 +24,9 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
+#[cfg(feature = "web-ui")]
 const PAGE: &str = include_str!("../public/index.html");
+#[cfg(feature = "web-ui")]
 const ICON: &[u8] = include_bytes!("../public/favicon.svg");
 const CHUNK_SIZE: usize = 512 * 1024;
 
@@ -35,6 +38,7 @@ struct App {
     rtc: RtcService,
     payload: Bytes,
     client_info: ClientInfo,
+    upload_progress: Registry,
 }
 
 pub fn router(cfg: Config, rtc: RtcService) -> Router {
@@ -60,6 +64,7 @@ pub fn router(cfg: Config, rtc: RtcService) -> Router {
         rtc,
         payload: Bytes::from(data),
         client_info: ClientInfo::new(),
+        upload_progress: Registry::default(),
     })
 }
 
@@ -103,6 +108,7 @@ fn is_speed_data(path: &str) -> bool {
         "/download-100k",
         "/upload",
         "/upload-stream",
+        "/upload-progress",
     ]
     .iter()
     .any(|target| path_is(path, target))
@@ -210,14 +216,88 @@ fn query(uri: &axum::http::Uri, key: &str) -> Option<String> {
         .map(|(_, value)| value.into_owned())
 }
 
+// Browser fetch metadata is defense in depth, not an authentication mechanism.
+// Cross-site embedding is opt-in AND requires an exact, non-opaque allowed Origin.
+fn cross_site_denied(headers: &HeaderMap, cfg: &Config) -> bool {
+    let origin = header_str(headers, "origin");
+    header_str(headers, "sec-fetch-site").eq_ignore_ascii_case("cross-site")
+        && !(cfg.allow_cross_site
+            && !origin.is_empty()
+            && origin != "null"
+            && cfg.allowed_origins.contains(origin))
+}
+
+#[cfg(feature = "web-ui")]
+fn connect_sources(cfg: &Config) -> String {
+    let mut origins = std::collections::BTreeSet::new();
+    for node in cfg.nodes.as_array().into_iter().flatten() {
+        for field in ["base", "directPage", "singleDownloadBase"] {
+            let Some(raw) = node[field].as_str() else {
+                continue;
+            };
+            let Ok(url) = url::Url::parse(raw) else {
+                continue;
+            };
+            if !matches!(url.scheme(), "http" | "https")
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+            {
+                continue;
+            }
+            // Serialize the parsed origin, never concatenate untrusted raw JSON
+            // into CSP: paths, quotes and directive separators cannot escape.
+            origins.insert(url.origin().ascii_serialization());
+            if field == "base" && matches!(node["id"].as_str(), Some("primary")) {
+                let mut h1 = url;
+                if h1.set_port(Some(8443)).is_ok() {
+                    origins.insert(h1.origin().ascii_serialization());
+                }
+            }
+        }
+    }
+    origins.into_iter().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(feature = "web-ui")]
+fn icon(head: bool) -> Response<Body> {
+    let mut out = response(
+        StatusCode::OK,
+        if head {
+            Body::empty()
+        } else {
+            Body::from(ICON)
+        },
+        Some("image/svg+xml; charset=utf-8"),
+        Some("public, max-age=86400"),
+    );
+    out.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&ICON.len().to_string()).unwrap_or(HeaderValue::from_static("0")),
+    );
+    out
+}
+
+#[cfg(not(feature = "web-ui"))]
+fn icon(_head: bool) -> Response<Body> {
+    error(StatusCode::NOT_FOUND, "not found")
+}
+
+#[cfg(not(feature = "web-ui"))]
+fn page(_cfg: &Config, _head: bool) -> Response<Body> {
+    error(StatusCode::NOT_FOUND, "not found")
+}
+
+#[cfg(feature = "web-ui")]
 fn page(cfg: &Config, head: bool) -> Response<Body> {
     let mut nonce = [0_u8; 18];
     if getrandom::fill(&mut nonce).is_err() {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error");
     }
     let nonce: String = nonce.iter().map(|value| format!("{value:02x}")).collect();
+    let connect_sources = connect_sources(cfg);
     let csp = format!(
-        "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src-elem 'nonce-{nonce}'; style-src-attr 'unsafe-inline'; connect-src 'self' https://speed.example.com https://speed.example.com:8443 http://192.0.2.10; worker-src blob:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src-elem 'nonce-{nonce}'; style-src-attr 'unsafe-inline'; connect-src 'self' https://speed.example.com https://speed.example.com:8443 http://192.0.2.10 {connect_sources}; worker-src blob:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
     );
     let body = if head {
         Body::empty()
@@ -391,6 +471,113 @@ fn stream_download(app: &App, ip: &str, millis: u64, lease: Lease) -> Response<B
     out
 }
 
+struct ProgressDeadline(tokio::task::JoinHandle<()>);
+impl Drop for ProgressDeadline {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn upload_progress(
+    app: &App,
+    ip: &str,
+    uri: &axum::http::Uri,
+    create: bool,
+    close: CancellationToken,
+) -> Response<Body> {
+    if !app.limits.rate(ip, true, &app.cfg) {
+        return error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "speed test rate limit exceeded",
+        );
+    }
+    if create {
+        if let Some(id) = query(uri, "id") {
+            if query(uri, "finish").as_deref() != Some("1") {
+                return error(StatusCode::BAD_REQUEST, "invalid progress close");
+            }
+            return match app.upload_progress.finish(ip, &id) {
+                Ok(()) => json(serde_json::json!({"closed":true})),
+                Err(reason) => error(StatusCode::BAD_REQUEST, reason),
+            };
+        }
+        let lanes = match query(uri, "lanes") {
+            None => 1,
+            Some(value) => match value.parse::<u8>() {
+                Ok(n) if [1, 2, 4, 8].contains(&n) => n,
+                _ => {
+                    return error(
+                        StatusCode::BAD_REQUEST,
+                        "invalid upload progress lane count",
+                    );
+                }
+            },
+        };
+        let warmup = bounded(query(uri, "warmupMs").as_deref(), 2000, 0, 5000);
+        let chunked = query(uri, "chunked").as_deref() == Some("1");
+        let mode = if chunked {
+            Mode::Chunks(lanes)
+        } else {
+            Mode::Stream(lanes)
+        };
+        return match app.upload_progress.create(
+            ip,
+            mode,
+            warmup,
+            Duration::from_millis(app.cfg.upload_ms + 10_000),
+            app.cfg.max_active_global,
+            app.cfg.max_active_per_ip,
+        ) {
+            Ok(id) => {
+                json(serde_json::json!({"id":id,"version":1,"intervalMs":100,"chunked":chunked}))
+            }
+            Err(reason) => error(StatusCode::TOO_MANY_REQUESTS, reason),
+        };
+    }
+    let Some(id) = query(uri, "id") else {
+        return json(serde_json::json!({"version":1,"intervalMs":100}));
+    };
+    let Some(progress) = app.upload_progress.get(ip, &id) else {
+        return error(StatusCode::NOT_FOUND, "upload progress not found");
+    };
+    let lease = match app.limits.active(ip, &app.cfg) {
+        Ok(lease) => lease,
+        Err(reason) => return error(StatusCode::TOO_MANY_REQUESTS, reason),
+    };
+    let timeout = app.cfg.upload_ms + 11_000;
+    let deadline = ProgressDeadline(tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(timeout)).await;
+        warn!("upload progress timed out; closing HTTP connection");
+        close.cancel();
+    }));
+    let stream = stream! {
+        let _lease = lease;
+        let _deadline = deadline;
+        let mut timer = tokio::time::interval(Duration::from_millis(100));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            let snapshot = progress.snapshot();
+            let done = snapshot["done"] == true || snapshot["expired"] == true;
+            yield Ok::<_, std::io::Error>(Bytes::from(snapshot.to_string() + "\n"));
+            if done { break; }
+        }
+    };
+    let mut out = response(
+        StatusCode::OK,
+        Body::from_stream(stream),
+        Some("application/x-ndjson"),
+        Some("no-store, no-transform"),
+    );
+    out.headers_mut().insert(
+        header::CONTENT_ENCODING,
+        HeaderValue::from_static("identity"),
+    );
+    out.headers_mut()
+        .insert("x-accel-buffering", HeaderValue::from_static("no"));
+    out
+}
+
 async fn upload(
     app: &App,
     ip: &str,
@@ -398,6 +585,7 @@ async fn upload(
     streaming: bool,
     warmup: u64,
     _lease: Lease,
+    mut receipt: Option<Receipt>,
 ) -> Response<Body> {
     let started = Instant::now();
     let mut stream = body.into_data_stream();
@@ -455,6 +643,9 @@ async fn upload(
         {
             return error_destroy(StatusCode::TOO_MANY_REQUESTS, "upload byte budget exceeded");
         }
+        if let Some(progress) = &receipt {
+            progress.received(chunk.len());
+        }
         let now = Instant::now();
         let first_byte = *first.get_or_insert(now);
         bytes = bytes.saturating_add(chunk.len() as u64);
@@ -472,6 +663,9 @@ async fn upload(
             measured_start.get_or_insert(now);
             measured += chunk.len() as u64;
         }
+    }
+    if let Some(progress) = &mut receipt {
+        progress.success();
     }
     let ended = Instant::now();
     if streaming {
@@ -550,12 +744,12 @@ async fn handle(
             None,
         )
     } else if is_speed_data(path)
-        && (header_str(&parts.headers, "sec-fetch-site").eq_ignore_ascii_case("cross-site")
+        && (cross_site_denied(&parts.headers, &app.cfg)
             || (!origin.is_empty() && !app.cfg.allowed_origins.contains(origin)))
     {
         error(
             StatusCode::FORBIDDEN,
-            if header_str(&parts.headers, "sec-fetch-site").eq_ignore_ascii_case("cross-site") {
+            if cross_site_denied(&parts.headers, &app.cfg) {
                 "cross-site speed data requests are not allowed"
             } else {
                 "speed data request origin is not allowed"
@@ -571,21 +765,7 @@ async fn handle(
     } else if (parts.method == Method::GET || parts.method == Method::HEAD)
         && path_is(path, "/favicon.svg")
     {
-        let mut out = response(
-            StatusCode::OK,
-            if parts.method == Method::HEAD {
-                Body::empty()
-            } else {
-                Body::from(ICON)
-            },
-            Some("image/svg+xml; charset=utf-8"),
-            Some("public, max-age=86400"),
-        );
-        out.headers_mut().insert(
-            header::CONTENT_LENGTH,
-            HeaderValue::from_str(&ICON.len().to_string()).unwrap_or(HeaderValue::from_static("0")),
-        );
-        out
+        icon(parts.method == Method::HEAD)
     } else if (parts.method == Method::GET || parts.method == Method::HEAD) && path_is(path, "/") {
         page(&app.cfg, parts.method == Method::HEAD)
     } else if (parts.method == Method::GET || parts.method == Method::HEAD)
@@ -596,6 +776,16 @@ async fn handle(
             Body::empty(),
             None,
             Some("no-store"),
+        )
+    } else if (parts.method == Method::GET || parts.method == Method::POST)
+        && path_is(path, "/upload-progress")
+    {
+        upload_progress(
+            &app,
+            &client_ip,
+            &parts.uri,
+            parts.method == Method::POST,
+            conn.close.clone(),
         )
     } else if parts.method == Method::GET
         && (path_is(path, "/download")
@@ -649,7 +839,21 @@ async fn handle(
                     } else {
                         0
                     };
-                    upload(&app, &client_ip, body, streaming, warmup, lease).await
+                    let receipt = match query(&parts.uri, "progressId") {
+                        None => Ok(None),
+                        Some(id) => {
+                            let lane = query(&parts.uri, "lane")
+                                .and_then(|v| v.parse::<u8>().ok())
+                                .unwrap_or(0);
+                            app.upload_progress.attach(&client_ip, &id, lane).map(Some)
+                        }
+                    };
+                    match receipt {
+                        Ok(receipt) => {
+                            upload(&app, &client_ip, body, streaming, warmup, lease, receipt).await
+                        }
+                        Err(reason) => error(StatusCode::BAD_REQUEST, reason),
+                    }
                 }
             }
         }
@@ -662,7 +866,7 @@ async fn handle(
     } else if parts.method == Method::GET && path_is(path, "/health") {
         json(serde_json::json!({"ok":true,"name":app.cfg.name}))
     } else if parts.method == Method::POST && path_is(path, "/webrtc/offer") {
-        if header_str(&parts.headers, "sec-fetch-site").eq_ignore_ascii_case("cross-site") {
+        if cross_site_denied(&parts.headers, &app.cfg) {
             error(
                 StatusCode::FORBIDDEN,
                 "cross-site WebRTC requests are not allowed",

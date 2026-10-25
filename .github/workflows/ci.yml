@@ -14,3 +14,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --all-features --locked
       - run: cargo build --release --locked
+      - run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
+      - run: cargo test --workspace --no-default-features --locked
+      - run: cargo build --release --no-default-features --locked

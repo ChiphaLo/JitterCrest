@@ -13,8 +13,10 @@ pub struct Config {
     pub name: String,
     pub allowed_origins: HashSet<String>,
     pub public_cors: bool,
+    pub allow_cross_site: bool,
     pub trust_proxy: bool,
     pub trusted_proxy_ips: HashSet<String>,
+    #[cfg(feature = "web-ui")]
     pub nodes: serde_json::Value,
     pub max_download: u64,
     pub max_upload: u64,
@@ -97,24 +99,28 @@ impl Config {
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
             .collect();
-        let mut nodes = serde_json::from_str::<serde_json::Value>(
-            &env::var("SPEEDTEST_NODES").unwrap_or_default(),
-        )
-        .unwrap_or_else(|_| {
-            serde_json::json!([
-                {"id":"local","label":"Local server","base":"","rtcTargetMs":25}
-            ])
-        });
-        if nodes.as_array().is_none_or(|array| array.is_empty()) {
-            nodes = serde_json::json!([
-                {"id":"local","label":"Local server","base":"","rtcTargetMs":25}
-            ]);
-        }
-        if env::var("ENABLE_PROBE_ONLY_NODE").as_deref() == Ok("0")
-            && let Some(array) = nodes.as_array_mut()
-        {
-            array.retain(|node| node["id"] != "probe-only");
-        }
+        #[cfg(feature = "web-ui")]
+        let nodes = {
+            let mut nodes = serde_json::from_str::<serde_json::Value>(
+                &env::var("SPEEDTEST_NODES").unwrap_or_default(),
+            )
+            .unwrap_or_else(|_| {
+                serde_json::json!([
+                    {"id":"local","label":"Local server","base":"","rtcTargetMs":25}
+                ])
+            });
+            if nodes.as_array().is_none_or(|array| array.is_empty()) {
+                nodes = serde_json::json!([
+                    {"id":"local","label":"Local server","base":"","rtcTargetMs":25}
+                ]);
+            }
+            if env::var("ENABLE_PROBE_ONLY_NODE").as_deref() == Ok("0")
+                && let Some(array) = nodes.as_array_mut()
+            {
+                array.retain(|node| node["id"] != "probe-only");
+            }
+            nodes
+        };
         let max_upload = integer("MAX_UPLOAD", 64 << 20, 1024, 256 << 20)?;
         let upload_ms = integer("MAX_UPLOAD_MS", 25_000, 1000, 120_000)?;
         let rtc_session_ms = integer("MAX_RTC_SESSION_MS", 90_000, 10_000, 300_000)?;
@@ -142,8 +148,10 @@ impl Config {
             name: env::var("SPEEDTEST_NODE_NAME").unwrap_or_else(|_| "speedtest-node".into()),
             allowed_origins,
             public_cors: env::var("PUBLIC_CORS").as_deref() == Ok("1"),
+            allow_cross_site: env::var("SPEEDTEST_ALLOW_CROSS_SITE").as_deref() == Ok("1"),
             trust_proxy,
             trusted_proxy_ips,
+            #[cfg(feature = "web-ui")]
             nodes,
             max_download: integer("MAX_DOWNLOAD", 256 << 20, 96 << 20, 1 << 30)?,
             max_upload,

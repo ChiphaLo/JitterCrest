@@ -6,6 +6,7 @@ page_source = (Path(__file__).resolve().parent.parent / 'public/index.html').rea
 helpers = page_source[page_source.index('      function createTimedUploadBody('):page_source.index('      async function uploadStream(')]
 helpers += page_source[page_source.index('      function publishThroughputSample('):page_source.index('      function percentile(', page_source.index('      function publishThroughputSample('))]
 helpers += page_source[page_source.index('      function createChunkPayload('):page_source.index('      async function uploadChunkLoop(')]
+helpers += page_source[page_source.index('      function buildUrl('):page_source.index('      async function downloadLane(')]
 checks = r'''
 return (async () => {
   function check(value, message) { if (!value) throw new Error(message); }
@@ -59,6 +60,47 @@ return (async () => {
   clock.now = 2000;
   tick();
   check(sampler.samples.length === 2, 'sampling continued during server-accounting wait');
+  const receipts = createServerUploadSampler(1);
+  const snap = (bytes, ms, done=false) => ({bytes,measuredBytes:bytes,elapsedMs:ms,measuredElapsedMs:ms,done,failed:false,expired:false});
+  receipts.accept(snap(1000000,100));
+  receipts.accept(snap(2000000,200));
+  check(receipts.samples[0] === 80 && receipts.samples[1] === 80, 'server receipts depended on the browser queue counter');
+  receipts.accept(snap(2000000,300));
+  check(receipts.samples[2] === 0, 'a genuine server receipt stall was hidden');
+  receipts.accept(snap(2000000,300,true));
+  check(receipts.samples.length === 3, 'completed telemetry manufactured a zero EOF sample');
+  let counterRejected=false;
+  try {receipts.accept(snap(1,400));} catch {counterRejected=true;}
+  check(counterRejected,'receipt counters regressed silently');
+  receipts.stop();receipts.accept(snap(5000000,500));
+  check(receipts.samples.length === 3,'receipt sampling survived cancellation');
+  const stallHistory=[];
+  for(let i=0;i<7;i++) publishThroughputSample(stallHistory,i*100,(i+1)*100,i===0?1000000:0,1,(i+1)*100);
+  check(clock.messages.at(-1).displayValue===0,'smoothing hid a sustained genuine stall');
+  const originalFetch = globalThis.fetch;
+  try {
+    const rows = Array.from({length:500},(_,i)=>({bytes:(i+1)*1000,measuredBytes:(i+1)*1000,
+      elapsedMs:(i+1)*100,measuredElapsedMs:(i+1)*100,done:i===499,failed:false,expired:false}));
+    globalThis.fetch = async () => new Response(rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+    let accepted = 0;
+    await readUploadProgress('https://test/',{id:'a'.repeat(32)},new AbortController().signal,()=>accepted++);
+    check(accepted===500,'batched receipt frames were rejected or dropped');
+    globalThis.fetch = async () => new Response(Array.from({length:2049},()=>JSON.stringify(rows[0])).join('\n')+'\n');
+    let tooMany=false;
+    try {await readUploadProgress('https://test/',{id:'a'.repeat(32)},new AbortController().signal,()=>{});}
+    catch {tooMany=true;}
+    check(tooMany,'receipt stream sample count was unbounded');
+    globalThis.fetch = async () => new Response('x'.repeat(9000));
+    let tooLarge=false;
+    try {await readUploadProgress('https://test/',{id:'a'.repeat(32)},new AbortController().signal,()=>{});}
+    catch {tooLarge=true;}
+    check(tooLarge,'unbounded incomplete receipt frame was accepted');
+    globalThis.fetch = async () => new Response(JSON.stringify(rows[0])+'\n');
+    let truncated=false;
+    try {await readUploadProgress('https://test/',{id:'a'.repeat(32)},new AbortController().signal,()=>{});}
+    catch {truncated=true;}
+    check(truncated,'truncated receipt stream became successful completion');
+  } finally {globalThis.fetch=originalFetch;}
   const controller = new AbortController();
   let progressBytes = 0;
   const request = uploadChunkRequest('http://test/upload', {size: 1000}, controller.signal, delta => { progressBytes += delta; });
@@ -86,7 +128,7 @@ return (async () => {
   let rejectedAbort = false;
   try { await aborting; } catch (error) { rejectedAbort = error.name === 'AbortError'; }
   check(rejectedAbort, 'XHR did not cancel with its owning upload');
-  return {invalidAccountingCases: bad.length, invalidJsonRejected: true, boundedProducer: true,
+  return {boundedReceiptCount:true,sustainedZeroVisible:true,batchedReceipts:true,boundedReceiptFrames:true,truncatedReceiptsRejected:true,serverReceiptQueueIndependence:true, serverRealZeroPreserved:true, receiptRegressionRejected:true, invalidAccountingCases: bad.length, invalidJsonRejected: true, boundedProducer: true,
     deadlineWithoutPull: true, cancellation: true, realZeroPreserved: true, noEofZero: true, noDrainSamples: true,
     chunkProgressBeforeAck: true, noProgressDoubleCount: true, zeroChunkAckRejected: true, chunkCancellation: true};
 })();
@@ -96,7 +138,7 @@ with sync_playwright() as playwright:
     page = browser.new_page()
     # Use a separate blank test document; production CSP stays unchanged.
     result = page.evaluate(r'''({helpers, checks}) => {
-      const clock = {now: 0, timers: new Map(), id: 0, requests: []};
+      const clock = {now: 0, timers: new Map(), id: 0, requests: [], messages: []};
       class MockXHR {
         constructor() { this.upload = {}; clock.requests.push(this); }
         open() {}
@@ -108,7 +150,7 @@ with sync_playwright() as playwright:
       };
       const run = new Function('clock', 'performance', 'self', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'XMLHttpRequest',
         'function fmtMbps(bytes, ms) { return bytes * 8 / ms / 1000; }\n' + helpers + '\n' + checks);
-      return run(clock, {now: () => clock.now}, {postMessage() {}},
+      return run(clock, {now: () => clock.now}, {postMessage(message) {clock.messages.push(message);}},
         (callback, ms) => schedule(callback, ms), id => clock.timers.delete(id),
         (callback, ms) => schedule(callback, ms, true), id => clock.timers.delete(id), MockXHR);
     }''', {'helpers': helpers, 'checks': checks})

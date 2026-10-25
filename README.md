@@ -65,9 +65,10 @@ read or execute the archive.
 ### Live speed charts
 
 Download and upload each have a live Mbps-over-time chart. Raw worker samples
-update the curve throughout the test; the final throughput is drawn as a horizontal
-dashed line only after that direction completes. Upload samples estimate
-browser-queued throughput; the final upload line uses server-accounted bytes.
+update a smoothed curve throughout the test. A horizontal dashed cumulative
+estimate is visible while measurement runs; final accounting replaces it with
+the exact result. Updated agents supply server-received upload counters; a legacy
+agent's explicit 404 falls back to a labeled browser-send estimate.
 Restarting a test clears old chart data. Mobile and dark-mode layouts are supported.
 
 ### High-speed transfer behavior
@@ -77,11 +78,13 @@ streams; they are not total test-file sizes. Single-stream upload runs for about
 12 seconds, including a 2-second warm-up; its final rate still uses the server's
 post-warm-up byte count and duration. Multi-stream final accounting is unchanged.
 The non-streaming multi-upload fallback reuses one immutable 4 MiB Blob across
-lanes and samples browser upload-progress events, not just completed-chunk ACKs.
-This avoids repeated BufferSource copies and prevents sparse whole-chunk ACKs
-from being mistaken for zero network throughput between responses.
-Upload sampling runs on a 300 ms timer: real stalled intervals remain zero, but
-sampling stops when production ends, before waiting for the server response.
+lanes and uses the same aggregated server-receipt telemetry as streaming uploads.
+Older agents instead use labeled browser upload-progress estimates, not just
+completed-chunk ACKs. This avoids repeated BufferSource copies and sparse ACK bins.
+Upload receipt snapshots run at approximately 100 ms intervals. Genuine receipt
+stalls remain zero; missing telemetry or response finalization is not converted
+into a fabricated zero-speed sample. Legacy browser-send sampling stops when
+production ends, before waiting for the server response.
 The UI explicitly shows this final accounting phase. Producers close at their
 deadline even without another pull; aborts/timeouts release their timers.
 
@@ -141,6 +144,56 @@ reason codes and density thresholds are not changed. Size/transport limits may
 prevent very large legacy reports; upgrade the client instead of weakening the
 validity checks. For a historical client, use its matching page/contracts from
 the recovery archive; do not silently mix protocol versions.
+
+## Central UI / lightweight remote agents
+
+The default build remains a standalone site. Use
+`cargo build --release --no-default-features --locked` for remote measurement
+agents **without embedded frontend assets**. The browser connects directly to
+each selected agent; the UI host is not a bandwidth relay. Centralize the node
+list in the UI host's `SPEEDTEST_NODES`. Cross-site measurement is opt-in and
+requires exact allowed origins; default security behavior is unchanged.
+See [multi-node configuration and migration boundaries](deploy/multi-node.md).
+
+## Smooth speed charts and upload receipt telemetry
+
+Speed samples are collected at approximately **100 ms** intervals, independently
+of a capped **60 fps** Canvas renderer. Numeric text is updated at up to 30 Hz.
+Axes/SVG nodes are reused; a cached monotone cubic path and a 500 ms rolling
+visual estimate smooth the trace without changing raw samples or final results.
+The dashed cumulative estimate is visible during measurement (`~` means
+provisional); final accounting replaces it with the exact final result.
+
+Streaming and chunked uploads can use the optional `/upload-progress` API:
+
+- `POST ?lanes=1&warmupMs=2000` creates an opaque, peer-IP-owned session.
+  Chunked fallback adds `chunked=1`; allowed lane counts are 1/2/4/8.
+- `GET ?id=...` streams bounded newline-delimited receipt counters at 10 Hz.
+- Upload requests attach `progressId=...&lane=...`. Chunked lanes cannot overlap;
+  `POST ?id=...&finish=1` closes their telemetry after their final byte ACKs.
+- Limits apply to session count, active observers, per-IP usage, input frames,
+  lifetime and slow-client cleanup. Cancellation releases the observer's lease.
+
+One telemetry stream aggregates all lanes. It measures bytes received by Rust,
+not bytes queued inside the browser. Genuine receipt stalls remain zero; missing
+telemetry is not manufactured into zero throughput. Final upload ACK validation,
+warmup rules, byte budgets and final time denominators are unchanged. A legacy
+backend's 404 uses an explicitly labeled browser send estimate; upgrade the site
+and agents together to enable server receipts. Measurement traffic stays direct
+to the selected agent, with the existing exact-origin CORS policy.
+
+The RTT plot computes P10/P50/P95/P99 independently for the up and down samples.
+Gray dashed percentile guides and numeric labels stay within their own row;
+both directions retain a shared RTT scale and the existing percentile definition.
+
+Short zero-rate windows can reflect real TCP delivery stalls rather than an
+exhausted upload file. A receiver may wait for a missing segment before delivering
+later bytes to the application. Diagnose with independent clients, receiver
+counters and transport evidence; do not hide such intervals by inventing samples.
+
+Optional checks: `python tests/throughput_worker.py`,
+`python tests/chart_render_math.py`, `python tests/rtt_percentile_plot.py`, and
+`python tests/browser_speed_charts.py`.
 
 ## Architecture and limitations
 

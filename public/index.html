@@ -507,7 +507,10 @@
     #speedTestContainer .value { font-size: clamp(46px, 6vw, 70px); }
     .speed-results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .speed-results-grid > .panel { min-width: 0; }
-    .speed-timeline { margin-top: 18px; min-width: 0; }
+    .speed-timeline { margin-top: 18px; min-width: 0; position: relative; height: 220px; }
+    .speed-timeline canvas { position: absolute; inset: 0; width: 100%; height: 220px; pointer-events: none; }
+    .speed-timeline svg { position: relative; pointer-events: none; }
+    #download, #upload { font-variant-numeric: tabular-nums; }
     .speed-timeline svg { display: block; width: 100%; height: 220px; font-family: var(--app-font); }
     .speed-axis-label { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
     .speed-grid-line { stroke: var(--chart-grid); stroke-width: 1; }
@@ -1508,6 +1511,8 @@
       return target.toString();
     }
     function navigateToProbeOnlyDirectPage() {
+      // A secure agent endpoint keeps the only UI on the central host.
+      if (typeof selectedNode.base === "string" && selectedNode.base.startsWith("https://")) return false;
       if (selectedNode.id !== "probe-only" || isProbeOnlyDirectPage()) return false;
       if (new URLSearchParams(location.search).get("testMode") === "local") return false;
       window.location.assign(probeOnlyDirectPageUrl());
@@ -1546,10 +1551,15 @@
         return { base: serviceBase(), protocol: "HTTP/1.1" };
       }
       if (selectedNode.id === "primary" && !forceH2) {
-        return {
-          base: location.protocol + "//" + location.hostname + ":8443/",
-          protocol: "HTTP/1.1",
-        };
+        // The dedicated H1 listener belongs to the selected agent, not the UI host.
+        const h1 = new URL(selectedNode.singleDownloadBase || serviceBase());
+        if (!selectedNode.singleDownloadBase) {
+          h1.port = "8443";
+          h1.pathname = "/";
+          h1.search = "";
+          h1.hash = "";
+        }
+        return { base: h1.toString(), protocol: "HTTP/1.1" };
       }
       return { base: serviceBase(), protocol: "HTTP/2" };
     }
@@ -2102,13 +2112,13 @@
         marker: uiColor("--text-tertiary", "#94a3b8"),
       };
       const w = 1000;
-      const h = 178;
+      const h = 220;
       const mapSamples = (s) => (s || []).map((item) => (item && typeof item === "object" ? item.rtt : item));
       const up = mapSamples(upSamples);
       const down = mapSamples(downSamples);
       const rows = [
-        { label: "Up", samples: up, color: theme.up, y: 54 },
-        { label: "Down", samples: down, color: theme.down, y: 116 },
+        { key: "up", label: "Up", samples: up, color: theme.up, y: 64 },
+        { key: "down", label: "Down", samples: down, color: theme.down, y: 156 },
       ];
       const all = rows.flatMap((row) => row.samples).filter((v) => Number.isFinite(v) && v > 0);
       const sampleMin = all.length ? Math.min(...all) : 0;
@@ -2174,30 +2184,41 @@
         parts.push('<line x1="' + tx.toFixed(2) + '" y1="34" x2="' + tx.toFixed(2) + '" y2="' + (h - 22) + '" stroke="' + theme.grid + '" stroke-width="1"/>');
         parts.push('<text x="' + tx.toFixed(2) + '" y="' + (h - 4) + '" text-anchor="middle" fill="' + theme.label + '" font-size="12">' + esc(label) + '</text>');
       });
-      if (all.length) {
-        const markers = [
-          { label: "P10", value: percentile(all, .1) },
-          { label: "P50", value: percentile(all, .5) },
-          { label: "P95", value: percentile(all, .95) },
-          { label: "P99", value: percentile(all, .99) },
-        ].filter((mark) => Number.isFinite(mark.value)).sort((a, b) => a.value - b.value);
-        const markerLabelXs = [];
-        let labelLayer = 0;
-        markers.forEach((mark) => {
-          const rx = x(mark.value);
-          parts.push('<line x1="' + rx.toFixed(2) + '" y1="34" x2="' + rx.toFixed(2) + '" y2="' + (h - 22) + '" stroke="' + theme.marker + '" stroke-width="1.8" stroke-dasharray="6 6"/>');
-          const offsets = [0, -28, 28, -56, 56];
-          const labelX = offsets.map((offset) => rx + offset).find((candidate) => markerLabelXs.every((usedX) => Math.abs(candidate - usedX) >= 28)) || rx;
-          markerLabelXs.push(labelX);
-          if (markerLabelXs.length > 1 && Math.abs(labelX - markerLabelXs[markerLabelXs.length - 2]) < 42) labelLayer = (labelLayer + 1) % 2;
-          else labelLayer = 0;
-          parts.push('<text x="' + labelX.toFixed(2) + '" y="' + (labelLayer ? 16 : 29) + '" text-anchor="middle" fill="' + theme.label + '" font-size="11" font-weight="600">' + esc(mark.label) + '</text>');
-        });
-      }
       rows.forEach((row) => {
         const vals = row.samples.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
         parts.push('<text x="12" y="' + (row.y + 5) + '" fill="' + theme.label + '" font-size="12" font-weight="600">' + esc(row.label) + '</text>');
         if (!vals.length) return;
+        // One set per direction: only the axis range is shared between rows.
+        const labelBoxes = [[], []];
+        const bandTop = row.y - 20, bandBottom = row.y + 22;
+        const markers = [["P10", .1], ["P50", .5], ["P95", .95], ["P99", .99]];
+        markers.forEach(([label, quantile]) => {
+          const value = percentile(vals, quantile), rx = x(value);
+          const text = label + " " + value.toFixed(1) + " ms";
+          const labelWidth = text.length * 7 + 8, gap = 8;
+          let placement = null;
+          for (let layer = 0; layer < 2; layer += 1) {
+            for (const offset of [0, -1, 1, -2, 2, -3, 3]) {
+              const center = Math.max(left + labelWidth / 2,
+                Math.min(w - right - labelWidth / 2, rx + offset * (labelWidth + gap)));
+              const start = center - labelWidth / 2, end = center + labelWidth / 2;
+              if (labelBoxes[layer].some(box => start < box.end + gap && end > box.start - gap)) continue;
+              const score = Math.abs(center - rx) + layer * 12;
+              if (!placement || score < placement.score) placement = {center, start, end, layer, score};
+            }
+          }
+          // Four bounded labels fit in two lanes at the fixed SVG plot width.
+          if (!placement) placement = {center:rx, start:rx-labelWidth/2, end:rx+labelWidth/2, layer:1};
+          labelBoxes[placement.layer].push(placement);
+          const labelY = bandTop - (placement.layer ? 8 : 26);
+          parts.push('<g class="latency-percentile" data-direction="' + row.key + '" data-percentile="' + label + '" data-value="' + value + '">');
+          parts.push('<title>' + row.label + ' ' + label + ': ' + value.toFixed(1) + ' ms</title>');
+          parts.push('<line class="latency-percentile-line" x1="' + rx.toFixed(2) + '" x2="' + rx.toFixed(2) + '" y1="' + bandTop + '" y2="' + bandBottom + '" stroke="' + theme.marker + '" stroke-width="1.8" stroke-dasharray="6 6"/>');
+          if (Math.abs(placement.center - rx) > 1) {
+            parts.push('<path d="M' + rx.toFixed(2) + ' ' + bandTop + 'L' + placement.center.toFixed(2) + ' ' + (labelY + 5) + '" fill="none" stroke="' + theme.marker + '" stroke-width="0.75" opacity="0.65"/>');
+          }
+          parts.push('<text class="latency-percentile-label" x="' + placement.center.toFixed(2) + '" y="' + labelY + '" text-anchor="middle" fill="' + theme.label + '" font-size="11" font-weight="600">' + esc(text) + '</text></g>');
+        });
         const min = vals[0];
         const q1 = percentile(vals, .25);
         const med = percentile(vals, .5);
@@ -2222,26 +2243,36 @@
       parts.push("</svg>");
       container.innerHTML = parts.join("");
     }
-    const speedCharts = {
-      download: { points: [], result: null, durationMs: 0, peak: 0 },
-      upload: { points: [], result: null, durationMs: 0, peak: 0 },
-    };
-    let speedChartFrame = null;
+    const speedCharts = Object.fromEntries(["download", "upload"].map(kind => [kind, {
+      points: [], result: null, reference: null, referenceBytes: 0, referenceMs: 0,
+      durationMs: 0, peak: 0, rangeMs: kind === "upload" ? 12000 : 10000,
+      active: false, dirty: true, resize: true, view: null, display: 0, referenceDisplay: 0,
+    }]));
+    let speedChartFrame = null, lastSpeedChartPaint = 0;
     function scheduleSpeedCharts() {
-      if (speedChartFrame !== null) return;
-      speedChartFrame = requestAnimationFrame(() => {
-        speedChartFrame = null;
-        drawSpeedCharts();
-      });
+      if (speedChartFrame !== null || document.hidden) return;
+      speedChartFrame = requestAnimationFrame(paintSpeedCharts);
     }
     function resetSpeedCharts() {
       for (const chart of Object.values(speedCharts)) {
-        chart.points = [];
-        chart.result = null;
-        chart.durationMs = 0;
-        chart.peak = 0;
+        chart.points.length = 0;
+        Object.assign(chart, {result:null,reference:null,referenceBytes:0,referenceMs:0,
+          durationMs:0,peak:0,active:false,dirty:true,display:0,referenceDisplay:0});
+        if (chart.view) {
+          const v=chart.view;v.path=null;v.ctx.clearRect(0,0,v.width,v.height);
+          v.svg.dataset.sampleCount="0";
+          if (v.line) {v.line.setAttribute("visibility","hidden");delete v.line.dataset.resultMbps;v.label.textContent="";}
+        }
       }
       drawSpeedCharts();
+    }
+    function startSpeedChart(kind) {
+      const chart = speedCharts[kind];
+      if (!chart) return;
+      chart.active = true;
+      chart.rangeMs = kind === "upload" && selectedSpeedThreads() === 1 ? 12000 : 10000;
+      chart.dirty = true;
+      scheduleSpeedCharts();
     }
     function addSpeedSample(kind, sample) {
       const chart = speedCharts[kind];
@@ -2249,70 +2280,186 @@
         || !Number.isFinite(sample.atMs) || sample.atMs < 0) return;
       const last = chart.points[chart.points.length - 1];
       if (last && sample.atMs <= last.atMs) return;
-      chart.points.push({ atMs: sample.atMs, value: sample.value });
-      // Bounded independently of the legacy mixed-unit live-measurement buffer.
-      if (chart.points.length > 512) chart.points.shift();
+      const display = Number.isFinite(sample.displayValue) ? Math.max(0,sample.displayValue) : sample.value;
+      chart.points.push({atMs:sample.atMs,value:sample.value,display,source:sample.source || (kind==="upload" ? "browser-queue" : "client-received")});
+      if (chart.points.length > 2048) chart.points.shift();
+      chart.referenceBytes += Number.isFinite(sample.sampleBytes) ? sample.sampleBytes : 0;
+      chart.referenceMs += Number.isFinite(sample.intervalMs) ? sample.intervalMs : 0;
+      chart.reference = Number.isFinite(sample.referenceValue) ? sample.referenceValue
+        : chart.referenceMs > 0 ? chart.referenceBytes * 8 / chart.referenceMs / 1000 : display;
       chart.durationMs = Math.max(chart.durationMs, sample.atMs);
-      chart.peak = Math.max(chart.peak, sample.value);
+      chart.peak = Math.max(chart.peak, display, chart.reference || 0);
+      chart.receivedAt = performance.now();
+      if (!last) { chart.display = display; chart.referenceDisplay = chart.reference; }
+      chart.dirty = true;
       scheduleSpeedCharts();
     }
     function finishSpeedChart(kind, result) {
       const chart = speedCharts[kind];
       if (!chart) return;
+      chart.active = false;
       chart.result = Number.isFinite(result.stable) && result.stable >= 0 ? result.stable : null;
+      chart.reference = chart.result;
+      chart.referenceDisplay = chart.result || 0;
+      chart.peak = Math.max(chart.peak, chart.result || 0);
       if (Number.isFinite(result.ms)) chart.durationMs = Math.max(chart.durationMs, result.ms);
+      chart.dirty = true;
       drawSpeedCharts();
     }
-    function drawSpeedCharts() {
-      for (const kind of ["download", "upload"]) {
-        const container = $(kind + "SpeedChart");
-        if (!container) continue;
-        const chart = speedCharts[kind];
-        const width = Math.max(260, Math.round(container.clientWidth || 480));
-        const height = 220;
-        const left = 52, right = 12, top = 28, bottom = 42;
-        const plotWidth = width - left - right;
-        const plotHeight = height - top - bottom;
-        const seconds = Math.max(1, Math.ceil(chart.durationMs / 1000));
-        const peak = Math.max(1, chart.peak, chart.result || 0) * 1.15;
-        const magnitude = 10 ** Math.floor(Math.log10(peak));
-        const maximum = Math.ceil(peak / magnitude) * magnitude;
-        const x = (atMs) => left + atMs / (seconds * 1000) * plotWidth;
-        const y = (mbps) => top + plotHeight * (1 - mbps / maximum);
-        const color = kind === "download" ? "var(--accent)" : "var(--success)";
-        const title = kind === "download" ? "Download" : "Upload";
-        const formatTick = (value) => Number(value.toPrecision(3)).toString();
-        const parts = ['<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + title + ' speed over time" data-sample-count="' + chart.points.length + '">'];
-        parts.push('<title>' + title + ' speed over time</title>');
-        parts.push('<desc>Time in seconds; speed in Mbps. ' + (kind === "upload"
-          ? 'The curve shows interval throughput estimates. The dashed line is the final server-accounted result.'
-          : 'The curve shows raw measured samples. The dashed line is the final timed throughput result.') + '</desc>');
-        parts.push('<text x="' + left + '" y="16" class="speed-axis-label">Mbps</text>');
-        for (let i = 0; i <= 4; i += 1) {
-          const value = maximum * i / 4;
-          const gridY = y(value).toFixed(2);
-          const tickX = x(seconds * 1000 * i / 4).toFixed(2);
-          parts.push('<line x1="' + left + '" y1="' + gridY + '" x2="' + (width - right) + '" y2="' + gridY + '" class="speed-grid-line"/>');
-          parts.push('<text x="' + (left - 8) + '" y="' + (y(value) + 4).toFixed(2) + '" text-anchor="end" class="speed-axis-label">' + formatTick(value) + '</text>');
-          parts.push('<text x="' + tickX + '" y="' + (height - bottom + 18) + '" text-anchor="' + (i === 0 ? 'start' : i === 4 ? 'end' : 'middle') + '" class="speed-axis-label">' + formatTick(seconds * i / 4) + '</text>');
-        }
-        parts.push('<path d="M' + left + ' ' + top + 'V' + (height - bottom) + 'H' + (width - right) + '" class="speed-grid-line" fill="none"/>');
-        parts.push('<text x="' + (left + plotWidth / 2).toFixed(2) + '" y="' + (height - 4) + '" text-anchor="middle" class="speed-axis-label">Time (s)</text>');
-        if (chart.points.length) {
-          const path = chart.points.map((point, i) => (i ? 'L' : 'M') + x(point.atMs).toFixed(2) + ' ' + y(point.value).toFixed(2)).join(' ');
-          parts.push('<path class="speed-sample-line" d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>');
-          const last = chart.points[chart.points.length - 1];
-          parts.push('<circle cx="' + x(last.atMs).toFixed(2) + '" cy="' + y(last.value).toFixed(2) + '" r="3" fill="' + color + '"/>');
-        }
-        if (chart.result !== null) {
-          const resultY = y(chart.result).toFixed(2);
-          parts.push('<line class="speed-result-line" x1="' + left + '" x2="' + (width - right) + '" y1="' + resultY + '" y2="' + resultY + '" stroke="' + color + '" stroke-width="1.75" stroke-dasharray="6 4" data-result-mbps="' + chart.result + '"/>');
-          parts.push('<text x="' + (width - right) + '" y="' + (y(chart.result) - 7).toFixed(2) + '" text-anchor="end" fill="' + color + '" class="speed-result-label">' + chart.result.toFixed(2) + ' Mbps</text>');
-        }
-        parts.push('</svg>');
-        container.innerHTML = parts.join('');
+    // A bounded, monotone cubic Hermite display path: no negative or overshooting
+    // speed extrema. Raw measured points remain unchanged for diagnostics/results.
+    function speedCurve(points, x, y) {
+      const path = new Path2D(), n = points.length;
+      if (!n) return {path, slopes:[]};
+      const delta = [], slopes = [];
+      for (let i=0;i<n-1;i++) delta.push((points[i+1].display-points[i].display)/(points[i+1].atMs-points[i].atMs));
+      for (let i=0;i<n;i++) slopes[i] = i===0 ? (delta[0]||0) : i===n-1 ? delta[i-1]
+        : delta[i-1]*delta[i] <= 0 ? 0 : (delta[i-1]+delta[i])/2;
+      for (let i=0;i<n-1;i++) {
+        if (!delta[i]) { slopes[i]=slopes[i+1]=0; continue; }
+        const a=slopes[i]/delta[i], b=slopes[i+1]/delta[i], norm=a*a+b*b;
+        if (norm>9) { const scale=3/Math.sqrt(norm); slopes[i]=scale*a*delta[i]; slopes[i+1]=scale*b*delta[i]; }
       }
+      path.moveTo(x(points[0].atMs),y(points[0].display));
+      for (let i=0;i<n-1;i++) {
+        const a=points[i],b=points[i+1],h=b.atMs-a.atMs;
+        path.bezierCurveTo(x(a.atMs+h/3),y(a.display+slopes[i]*h/3),
+          x(b.atMs-h/3),y(b.display-slopes[i+1]*h/3),x(b.atMs),y(b.display));
+      }
+      return {path,slopes};
     }
+    function speedCurveValue(points, slopes, atMs) {
+      if (points.length===1 || atMs<=points[0].atMs) return points[0].display;
+      let i=points.length-2;
+      while (i>0 && points[i].atMs>atMs) i--;
+      const a=points[i],b=points[i+1],h=b.atMs-a.atMs,t=Math.max(0,Math.min(1,(atMs-a.atMs)/h));
+      const value=(2*t*t*t-3*t*t+1)*a.display+(t*t*t-2*t*t+t)*h*slopes[i]
+        +(-2*t*t*t+3*t*t)*b.display+(t*t*t-t*t)*h*slopes[i+1];
+      return Math.max(Math.min(a.display,b.display),Math.min(Math.max(a.display,b.display),value));
+    }
+    function speedChartView(kind, chart) {
+      const container=$(kind+"SpeedChart");
+      if (!container) return null;
+      if (!chart.view) {
+        // Canvas/SVG are allocated once. Axes/text update only on layout/scale
+        // changes; a frame never rebuilds the DOM or reparses an SVG string.
+        container.innerHTML='<canvas aria-hidden="true"></canvas><svg role="img" aria-label="'+kind+' speed over time"></svg>';
+        const canvas=container.querySelector("canvas"),svg=container.querySelector("svg");
+        canvas.style.color=kind==="download" ? "var(--accent)" : "var(--success)";
+        chart.view={canvas,svg,ctx:canvas.getContext("2d"),frames:0,paintMs:0,maxPaintMs:0,axisBuilds:0,key:""};
+      }
+      const v=chart.view;
+      if (chart.resize) {
+        v.width=Math.max(260,Math.round(container.clientWidth||480));v.height=220;
+        v.color=getComputedStyle(v.canvas).color;
+        const dpr=Math.min(2,window.devicePixelRatio||1);
+        v.canvas.width=Math.round(v.width*dpr);v.canvas.height=Math.round(v.height*dpr);
+        v.ctx.setTransform(dpr,0,0,dpr,0,0);
+        chart.resize=false;chart.dirty=true;
+      }
+      return v;
+    }
+    function paintSpeedCharts(now) {
+      speedChartFrame=null;
+      const frameInterval=1000/60, elapsedFrame=now-lastSpeedChartPaint;
+      if (elapsedFrame < frameInterval-1) {scheduleSpeedCharts();return;}
+      lastSpeedChartPaint=now-(Math.max(0,elapsedFrame)%frameInterval);
+      let animate=false;
+      for (const kind of ["download","upload"]) {
+        const chart=speedCharts[kind];
+        if (!chart.active && !chart.dirty && chart.view) continue;
+        const v=speedChartView(kind,chart);
+        if (!v) continue;
+        const begin=performance.now(),width=v.width,height=v.height,left=52,right=12,top=28,bottom=42;
+        const pw=width-left-right,ph=height-top-bottom;
+        const seconds=Math.max(chart.rangeMs/1000,Math.ceil(Math.max(0,chart.durationMs-150)/2000)*2);
+        const peak=Math.max(1,chart.peak,chart.reference||0)*1.15;
+        const magnitude=10**Math.floor(Math.log10(peak));
+        const maximum=Math.ceil(peak/magnitude*2)/2*magnitude;
+        const x=ms=>left+ms/(seconds*1000)*pw,y=value=>top+ph*(1-value/maximum);
+        const key=width+":"+seconds+":"+maximum;
+        if (v.key!==key) {
+          const tick=value=>Number(value.toPrecision(3)).toString();
+          const parts=['<title>'+kind+' speed over time</title><desc>Time (s), speed in Mbps. Smoothed 0.5 s display from raw 100 ms samples; the live dashed estimate is provisional until final accounting.</desc>'];
+          parts.push('<text x="'+left+'" y="16" class="speed-axis-label">Mbps</text>');
+          for (let i=0;i<=4;i++) {
+            const value=maximum*i/4,gy=y(value),tx=x(seconds*1000*i/4);
+            parts.push('<line x1="'+left+'" y1="'+gy+'" x2="'+(width-right)+'" y2="'+gy+'" class="speed-grid-line"/>');
+            parts.push('<text x="'+(left-8)+'" y="'+(gy+4)+'" text-anchor="end" class="speed-axis-label">'+tick(value)+'</text>');
+            parts.push('<text x="'+tx+'" y="'+(height-bottom+18)+'" text-anchor="'+(i===0?'start':i===4?'end':'middle')+'" class="speed-axis-label">'+tick(seconds*i/4)+'</text>');
+          }
+          parts.push('<path d="M'+left+' '+top+'V'+(height-bottom)+'H'+(width-right)+'" class="speed-grid-line" fill="none"/>');
+          parts.push('<text x="'+(left+pw/2)+'" y="'+(height-4)+'" text-anchor="middle" class="speed-axis-label">Time (s)</text>');
+          const color=kind==="download" ? "var(--accent)" : "var(--success)";
+          parts.push('<g class="speed-reference-group"><line class="speed-result-line" x1="'+left+'" x2="'+(width-right)+'" y1="0" y2="0" stroke="'+color+'" stroke-width="1.75" stroke-dasharray="6 4" visibility="hidden"/>');
+          parts.push('<text class="speed-result-label" x="'+(width-right)+'" y="-7" text-anchor="end" fill="'+color+'"></text></g>');
+          v.svg.setAttribute("viewBox","0 0 "+width+" "+height);
+          v.svg.innerHTML=parts.join("");
+          v.line=v.svg.querySelector(".speed-result-line");v.label=v.svg.querySelector(".speed-result-label");
+          v.referenceGroup=v.svg.querySelector(".speed-reference-group");
+          v.key=key;v.axisBuilds++;chart.dirty=true;
+        }
+        if (chart.dirty) {
+          const curve=speedCurve(chart.points,x,y);v.path=curve.path;v.slopes=curve.slopes;
+          v.svg.dataset.sampleCount=String(chart.points.length);
+          v.svg.dataset.renderCount=String(v.frames);
+          v.svg.dataset.smoothing="monotone-cubic-500ms";
+        }
+        const dt=Math.min(100,Math.max(0,now-(v.lastFrame||now)));v.lastFrame=now;
+        const last=chart.points[chart.points.length-1];
+        if (last) {
+          const alpha=1-Math.exp(-dt/100);
+          if (chart.active) {
+            chart.display+=(last.display-chart.display)*alpha;
+            chart.referenceDisplay+=((chart.reference||0)-chart.referenceDisplay)*alpha;
+            // Numeric glyph layout is capped at 30 Hz; the curve stays at 60 Hz.
+            if (now-(v.numberAt||0)>=1000/30-1) {
+              const text=chart.display.toFixed(2);
+              if ($(kind).textContent!==text) $(kind).textContent=text;
+              v.numberAt=now;
+            }
+          }
+          const at=chart.active ? Math.min(last.atMs,last.atMs+(now-chart.receivedAt)-100) : last.atMs;
+          const cursor=Math.max(chart.points[0].atMs,at),ctx=v.ctx;
+          ctx.clearRect(0,0,width,height);ctx.save();
+          ctx.beginPath();ctx.rect(left,top,Math.max(0,x(cursor)-left+1),ph);ctx.clip();
+          ctx.strokeStyle=v.color;ctx.lineWidth=2.25;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke(v.path);ctx.restore();
+          const endpoint=speedCurveValue(chart.points,v.slopes,cursor);
+          ctx.fillStyle=v.color;ctx.beginPath();ctx.arc(x(cursor),y(endpoint),3,0,Math.PI*2);ctx.fill();
+          if (chart.active && (now-chart.receivedAt<220 || Math.abs(last.display-chart.display)>0.02
+            || Math.abs((chart.reference||0)-chart.referenceDisplay)>0.02)) animate=true;
+        } else v.ctx.clearRect(0,0,width,height);
+        if (chart.reference!==null) {
+          const position=y(chart.referenceDisplay);
+          v.line.setAttribute("visibility","visible");
+          const transform="translateY("+position.toFixed(3)+"px)";
+          if (v.referenceGroup.style.transform!==transform) v.referenceGroup.style.transform=transform;
+          const referenceText=String(chart.reference),provisional=chart.result===null ? "true" : "false";
+          if (v.line.dataset.resultMbps!==referenceText) v.line.dataset.resultMbps=referenceText;
+          if (v.line.dataset.provisional!==provisional) v.line.dataset.provisional=provisional;
+          const text=(chart.result===null ? "~ " : "")+chart.reference.toFixed(2)+" Mbps";
+          if (v.label.textContent!==text) v.label.textContent=text;
+        } else {
+          v.line.setAttribute("visibility","hidden");delete v.line.dataset.resultMbps;v.label.textContent="";
+        }
+        chart.dirty=false;v.frames++;
+        const elapsed=performance.now()-begin;v.paintMs+=elapsed;v.maxPaintMs=Math.max(v.maxPaintMs,elapsed);
+      }
+      if (animate) scheduleSpeedCharts();
+    }
+    function drawSpeedCharts() {
+      for (const chart of Object.values(speedCharts)) {chart.resize=true;chart.dirty=true;}
+      scheduleSpeedCharts();
+    }
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden) drawSpeedCharts();});
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change",drawSpeedCharts);
+    new MutationObserver(drawSpeedCharts).observe(document.documentElement,{attributes:true,attributeFilter:["class","data-theme","style"]});
+    window.__speedtestChartDiagnostics=()=>Object.fromEntries(Object.entries(speedCharts).map(([kind,c])=>[kind,{
+      samples:c.points.length,rawZeroSamples:c.points.filter(p=>p.value===0).length,sources:[...new Set(c.points.map(p=>p.source))],
+      frames:c.view?.frames||0,axisBuilds:c.view?.axisBuilds||0,paintMs:c.view?.paintMs||0,maxPaintMs:c.view?.maxPaintMs||0,
+      points:c.points.map(p=>({...p})),
+    }]));
+
     function addPoint(label, value, color) {
       state.points.push({ label, value, color });
       if (state.points.length > 90) state.points.shift();
@@ -3887,10 +4034,10 @@
         const cut = Math.min(Math.floor(vals.length * 0.1), Math.floor((vals.length - 1) / 2));
         return avg(vals.slice(cut, vals.length - cut));
       }
-      function publishThroughputSample(history, startAt, endAt, bytes, concurrency, atMs) {
+      function publishThroughputSample(history, startAt, endAt, bytes, concurrency, atMs, extra = {}) {
         const elapsedMs = Math.max(1, endAt - startAt);
         const rawValue = fmtMbps(bytes, elapsedMs);
-        const windowMs = 1200;
+        const windowMs = 500;
         const cutoff = endAt - windowMs;
         history.push({ startAt, endAt, bytes, elapsedMs, value: rawValue });
         while (history.length > 1 && history[1].endAt <= cutoff) history.shift();
@@ -3907,6 +4054,7 @@
         const displayValue = coveredMs > 0 ? fmtMbps(windowBytes, coveredMs) : rawValue;
         self.postMessage({
           type: "sample",
+          sampleBytes: bytes, intervalMs: elapsedMs, ...extra,
           value: rawValue,
           atMs,
           displayValue,
@@ -3960,7 +4108,7 @@
       async function downloadMulti(base, concurrency, singleStreamBase, singleStreamProtocol) {
         if (concurrency <= 1) return await download(singleStreamBase || base, singleStreamProtocol);
         const durationMs = 10000;
-        const sampleMs = 300;
+        const sampleMs = 100;
         const warmupMs = 500;
         const controller = new AbortController();
         const laneBytes = Array(concurrency).fill(0n);
@@ -3983,7 +4131,7 @@
           if (dt <= 0) return;
           const delta = totalBytes - lastBytes;
           const mbps = fmtMbps(Number(delta), dt);
-          if (Number.isFinite(mbps) && now - started >= warmupMs && delta > 0n) {
+          if (Number.isFinite(mbps) && now - started >= warmupMs) {
             const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency, now - started);
             samples.push(sample.rawValue);
             sampleDetails.push({ value: sample.rawValue, bytes: Number(delta), elapsedMs: sample.elapsedMs, atMs: now - started });
@@ -4032,7 +4180,7 @@
       async function download(base, protocol) {
         const totalDurationMs = 11000;
         const warmupMs = 1000;
-        const sampleMs = 300;
+        const sampleMs = 100;
         const controller = new AbortController();
         const startedAt = performance.now();
         const deadline = startedAt + totalDurationMs;
@@ -4041,7 +4189,7 @@
         let measurementStartAt = null;
         let measurementStartBytes = 0n;
         let lastSampleAt = null;
-        let lastSampleBytes = 0n;
+        let lastSampleBytes = 0n, samplingTimer = null;
         let ttfbMs = null;
         let lastWarmupPhaseAt = 0;
         const samples = [];
@@ -4073,27 +4221,26 @@
               measurementStartBytes = totalBytes;
               lastSampleAt = now;
               lastSampleBytes = totalBytes;
+              samplingTimer = setInterval(() => {
+                const at = performance.now();
+                const delta = Number(totalBytes - lastSampleBytes);
+                const published = publishThroughputSample(displayHistory, lastSampleAt, at, delta, 1, at - measurementStartAt,
+                  {source:"client-received"});
+                samples.push(published.rawValue);
+                sampleDetails.push({value:published.rawValue,bytes:delta,elapsedMs:published.elapsedMs,atMs:at-measurementStartAt});
+                lastSampleAt = at; lastSampleBytes = totalBytes;
+              }, sampleMs);
               self.postMessage({ type: "phase", phase: "measuring" });
             } else if (measurementStartAt === null && now - lastWarmupPhaseAt >= 100) {
               lastWarmupPhaseAt = now;
               self.postMessage({ type: "phase", phase: "warmup", warmupElapsedMs: Math.min(warmupMs, now - startedAt), warmupTotalMs: warmupMs });
             }
-            if (measurementStartAt !== null && now - lastSampleAt >= sampleMs) {
-              const sampleBytes = Number(totalBytes - lastSampleBytes);
-              const sample = fmtMbps(sampleBytes, now - lastSampleAt);
-              if (Number.isFinite(sample) && sample > 0) {
-                const published = publishThroughputSample(displayHistory, lastSampleAt, now, sampleBytes, 1, now - measurementStartAt);
-                samples.push(published.rawValue);
-                sampleDetails.push({ value: published.rawValue, bytes: sampleBytes, elapsedMs: published.elapsedMs, atMs: now - measurementStartAt });
-              }
-              lastSampleAt = now;
-              lastSampleBytes = totalBytes;
-            }
+
           }
         } catch (err) {
           if (!err || err.name !== "AbortError" || !controller.signal.aborted) throw err;
         } finally {
-          clearTimeout(timer);
+          clearTimeout(timer); clearInterval(samplingTimer);
         }
         const endedAt = performance.now();
         if (measurementStartAt === null) throw new Error("download stream ended before warmup completed");
@@ -4173,7 +4320,7 @@
       }
       function createUploadSampler(started, warmupMs, readBytes, concurrency) {
         const samples = [], sampleDetails = [], history = [];
-        const sampleMs = 300;
+        const sampleMs = 100;
         let lastAt = null, lastBytes = 0n, timer = null, stopped = false;
         function sample(final = false) {
           if (stopped || lastAt === null) return;
@@ -4182,7 +4329,7 @@
           if (now - lastAt < (final ? sampleMs / 2 : 1)) return;
           const bytes = readBytes();
           const delta = Number(bytes - lastBytes);
-          const published = publishThroughputSample(history, lastAt, now, delta, concurrency, now - started);
+          const published = publishThroughputSample(history, lastAt, now, delta, concurrency, now - started, {source:"browser-queue"});
           samples.push(published.rawValue);
           sampleDetails.push({value: published.rawValue, bytes: delta, elapsedMs: published.elapsedMs, atMs: now - started});
           lastAt = now;
@@ -4221,25 +4368,99 @@
         catch { throw new Error("upload server returned invalid accounting JSON"); }
         return validateUploadAccounting(json, expectedBytes, measurement);
       }
+      async function startUploadProgress(base, lanes, warmupMs, chunked = false) {
+        // Optional v1 capability: only a legacy 404 uses the labeled queue estimate.
+        const response = await fetch(buildUrl("upload-progress?lanes=" + lanes + "&warmupMs=" + warmupMs + (chunked ? "&chunked=1" : ""), base),
+          {method: "POST", cache: "no-store", signal: AbortSignal.timeout(3000)});
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error("upload progress start HTTP " + response.status);
+        const session = await response.json();
+        if (session.version !== 1 || !/^[a-f0-9]{32}$/.test(session.id)) throw new Error("invalid upload progress session");
+        if (chunked && session.chunked !== true) return null;
+        return session;
+      }
+      async function readUploadProgress(base, session, signal, accept) {
+        const response = await checkedFetch(buildUrl("upload-progress?id=" + session.id, base), {cache:"no-store", signal});
+        const reader = response.body.getReader(), decoder = new TextDecoder();
+        let pending = "", frames = 0;
+        try {
+          for (;;) {
+            const item = await reader.read();
+            if (item.done) break;
+            if (item.value.byteLength > 1048576) throw new Error("oversized upload progress batch");
+            pending += decoder.decode(item.value, {stream:true});
+            let newline;
+            while ((newline = pending.indexOf("\n")) >= 0) {
+              const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+              if (++frames > 2048) throw new Error("too many upload progress frames");
+              if (!line) continue;
+              if (line.length > 8192) throw new Error("oversized upload progress frame");
+              const stats = JSON.parse(line);
+              accept(stats);
+              if (stats.done || stats.expired) return;
+            }
+            if (pending.length > 8192) throw new Error("oversized upload progress frame");
+          }
+          if (!signal.aborted) throw new Error("upload progress ended without completion");
+        } finally { await reader.cancel().catch(() => {}); }
+      }
+      function createServerUploadSampler(concurrency) {
+        const samples = [], sampleDetails = [], history = [];
+        let lastMs = 0, lastBytes = 0, stopped = false, measuring = false;
+        self.postMessage({type:"phase", phase:"warmup"});
+        return {samples, sampleDetails, accept(stats) {
+          if (stopped) return;
+          if (!stats || !Number.isSafeInteger(stats.bytes) || stats.bytes < 0
+              || !Number.isSafeInteger(stats.measuredBytes) || stats.measuredBytes < 0
+              || stats.measuredBytes > stats.bytes || !Number.isFinite(stats.elapsedMs)
+              || !Number.isFinite(stats.measuredElapsedMs) || stats.elapsedMs < 0 || stats.measuredElapsedMs < 0
+              || stats.measuredElapsedMs > stats.elapsedMs || stats.elapsedMs > 180000 || typeof stats.done !== "boolean"
+              || typeof stats.failed !== "boolean" || typeof stats.expired !== "boolean") {
+            throw new Error("invalid upload receipt telemetry");
+          }
+          if (stats.expired || stats.failed) throw new Error("upload receipt telemetry failed or expired");
+          const at = stats.measuredElapsedMs, bytes = stats.measuredBytes;
+          if (at === 0) return;
+          if (at < lastMs || bytes < lastBytes) throw new Error("upload receipt counters regressed");
+          if (at - lastMs < 50) return;
+          if (!measuring) { measuring = true; self.postMessage({type:"phase",phase:"measuring"}); }
+          const referenceValue = concurrency === 1 ? fmtMbps(bytes, at) : fmtMbps(stats.bytes, stats.elapsedMs);
+          const sample = publishThroughputSample(history, lastMs, at, bytes - lastBytes, concurrency, stats.elapsedMs,
+            {source:"server-received", referenceValue});
+          samples.push(sample.rawValue);
+          sampleDetails.push({value:sample.rawValue,bytes:bytes-lastBytes,elapsedMs:sample.elapsedMs,atMs:stats.elapsedMs,source:"server-received"});
+          lastMs = at; lastBytes = bytes;
+        }, stop() { stopped = true; }};
+      }
+      function monitorUploadProgress(base, progress, signal, sampler) {
+        if (!progress) return Promise.resolve();
+        return readUploadProgress(base, progress, signal, stats => sampler.accept(stats)).catch(error => {
+          if (!signal.aborted) self.postMessage({type:"phase",phase:"telemetry-unavailable",message:error.message});
+        });
+      }
+
       async function uploadStream(base) {
-        const totalDurationMs = 12000, warmupMs = 2000, sampleMs = 300;
+        const totalDurationMs = 12000, warmupMs = 2000, sampleMs = 100;
+        const progress = await startUploadProgress(base, 1, warmupMs);
         const started = performance.now();
         const controller = new AbortController();
         let timedOut = false, queuedBytes = 0n;
-        const sampler = createUploadSampler(started, warmupMs, () => queuedBytes, 1);
+        const sampler = progress ? createServerUploadSampler(1) : createUploadSampler(started, warmupMs, () => queuedBytes, 1);
+        const watching = monitorUploadProgress(base, progress, controller.signal, sampler);
         const transfer = createTimedUploadBody(totalDurationMs, (length) => { queuedBytes += BigInt(length); }, () => {
-          sampler.stop();
+          if (!progress) sampler.stop();
           self.postMessage({type: "phase", phase: "finalizing"});
         });
         // Includes a bounded drain/response grace period; never await a server forever.
         const watchdog = setTimeout(() => { timedOut = true; controller.abort(); }, totalDurationMs + 15000);
         try {
-          const res = await checkedFetch(buildUrl("upload-stream?n=" + randomId() + "&warmupMs=" + warmupMs, base), {
+          const res = await checkedFetch(buildUrl("upload-stream?n=" + randomId() + "&warmupMs=" + warmupMs + (progress ? "&progressId=" + progress.id : ""), base), {
             method: "POST", body: transfer.body, duplex: "half", cache: "no-store", signal: controller.signal,
           });
           if (!transfer.closed || transfer.cancelled) throw new Error("upload server replied before the stream completed");
           const json = await readUploadAccounting(res, queuedBytes, true);
           const clientElapsedMs = Math.max(1, performance.now() - started);
+          await Promise.race([watching, sleep(200)]);
           const stable = fmtMbps(json.measuredBytes, json.measuredElapsedMs);
           self.postMessage({type: "result", bytes: json.measuredBytes, ms: json.measuredElapsedMs,
             raw: stable, stable, sampledStable: stableRate(sampler.samples), samples: sampler.samples,
@@ -4341,10 +4562,10 @@
         });
       }
 
-      async function uploadLane(base, laneId, durationMs, signal, onQueuedBytes, onClose) {
+      async function uploadLane(base, laneId, durationMs, signal, onQueuedBytes, onClose, progress) {
         const transfer = createTimedUploadBody(durationMs, (length) => onQueuedBytes(laneId, length), onClose);
         try {
-          const res = await checkedFetch(buildUrl("upload-stream?n=" + randomId() + "&lane=" + laneId, base), {
+          const res = await checkedFetch(buildUrl("upload-stream?warmupMs=0&n=" + randomId() + "&lane=" + laneId + (progress ? "&progressId=" + progress.id : ""), base), {
             method: "POST", body: transfer.body, cache: "no-store", signal, duplex: "half",
           });
           if (!transfer.closed || transfer.cancelled) throw new Error("upload lane replied before its stream completed");
@@ -4352,11 +4573,11 @@
           return {laneId, queuedBytes: transfer.bytes, serverBytes: BigInt(json.bytes), serverElapsedMs: json.elapsedMs};
         } finally { transfer.dispose(); }
       }
-      async function uploadChunkLane(base, laneId, durationMs, signal, onBytes, payload) {
+      async function uploadChunkLane(base, laneId, durationMs, signal, onBytes, payload, progress) {
         let bytes = 0n;
         const deadline = performance.now() + durationMs;
         while (performance.now() < deadline && !signal.aborted) {
-          const json = await uploadChunkRequest(buildUrl("upload?n=" + randomId() + "&lane=" + laneId, base),
+          const json = await uploadChunkRequest(buildUrl("upload?n=" + randomId() + "&lane=" + laneId + (progress ? "&progressId=" + progress.id : ""), base),
             payload, signal, (delta) => onBytes(laneId, delta));
           bytes += BigInt(json.bytes);
         }
@@ -4365,26 +4586,39 @@
       }
       async function runUploadLanes(base, concurrency, chunked) {
         const durationMs = 10000, warmupMs = 500;
+        const progress = await startUploadProgress(base, concurrency, warmupMs, chunked);
         const started = performance.now();
         const controller = new AbortController();
         let totalBytes = 0n, producers = concurrency, timedOut = false;
         const chunkPayload = chunked ? createChunkPayload() : null;
-        const sampler = createUploadSampler(started, warmupMs, () => totalBytes, concurrency);
+        const sampler = progress ? createServerUploadSampler(concurrency) : createUploadSampler(started, warmupMs, () => totalBytes, concurrency);
+        const watching = monitorUploadProgress(base, progress, controller.signal, sampler);
         const onBytes = (_lane, length) => { totalBytes += BigInt(length); };
         const finish = () => {
-          sampler.stop();
+          if (!progress) sampler.stop();
           self.postMessage({type: "phase", phase: "finalizing"});
         };
         const onClose = () => { if (--producers === 0) finish(); };
         const endSampler = chunked ? setTimeout(finish, durationMs) : null;
         const watchdog = setTimeout(() => { timedOut = true; controller.abort(); }, durationMs + 15000);
         const lanes = Array.from({length: concurrency}, (_, laneId) => chunked
-          ? uploadChunkLane(base, laneId, durationMs, controller.signal, onBytes, chunkPayload)
-          : uploadLane(base, laneId, durationMs, controller.signal, onBytes, onClose));
+          ? uploadChunkLane(base, laneId, durationMs, controller.signal, onBytes, chunkPayload, progress)
+          : uploadLane(base, laneId, durationMs, controller.signal, onBytes, onClose, progress));
         try {
           const results = await Promise.all(lanes);
-          const bytes = results.reduce((sum, lane) => sum + lane.serverBytes, 0n);
           const totalMs = Math.max(1, performance.now() - started);
+          if (progress && chunked) {
+            sampler.stop();
+            // Closing telemetry is not part of the throughput denominator.
+            try {
+              await checkedFetch(buildUrl("upload-progress?id="+progress.id+"&finish=1",base),
+                {method:"POST",cache:"no-store",signal:controller.signal});
+            } catch (error) {
+              self.postMessage({type:"phase",phase:"telemetry-unavailable",message:error.message});
+            }
+          }
+          await Promise.race([watching, sleep(200)]);
+          const bytes = results.reduce((sum, lane) => sum + lane.serverBytes, 0n);
           const stable = fmtMbps(Number(bytes), totalMs);
           self.postMessage({type: "result", bytes, ms: totalMs, raw: stable, stable,
             sampledStable: stableRate(sampler.samples), samples: sampler.samples, sampleDetails: sampler.sampleDetails,
@@ -4487,11 +4721,13 @@
           reject(new Error("Worker aborted"));
           return;
         }
+        startSpeedChart(kind);
         const source = "(" + speedWorkerMain.toString() + ")()";
         const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
         const worker = new Worker(url);
         
         const onAbort = () => {
+          if (speedCharts[kind]) {speedCharts[kind].active=false;scheduleSpeedCharts();}
           worker.terminate();
           URL.revokeObjectURL(url);
           cleanup();
@@ -4518,14 +4754,18 @@
           }
           const msg = ev.data || {};
           if (msg.type === "phase" && kind === "upload") {
-            if (msg.phase === "finalizing") {
+            if (msg.phase === "telemetry-unavailable") {
+              $("uploadMeta").textContent = "Live server receipts unavailable; final byte accounting is still required.";
+            } else if (msg.phase === "finalizing") {
               $("uploadMeta").textContent = "Finishing upload; waiting for server byte accounting...";
             } else if (msg.phase === "warmup") {
               $("upload").textContent = "Warming up...";
-              $("uploadMeta").textContent = "Upload warm-up; excluded from the single-stream final measurement.";
+              $("uploadMeta").textContent = selectedSpeedThreads() === 1
+                ? "Upload warm-up; excluded from the single-stream final measurement."
+                : "Starting receipt sampling; the final multi-stream result uses the whole run.";
             } else if (msg.phase === "measuring") {
               $("upload").textContent = "Measuring...";
-              $("uploadMeta").textContent = "Collecting 300 ms throughput samples...";
+              $("uploadMeta").textContent = "Collecting 100 ms receipt samples...";
             }
           } else if (msg.type === "phase" && kind === "download") {
             if (msg.phase === "connecting") {
@@ -4538,17 +4778,15 @@
               $("downloadMeta").textContent = "Warm-up " + Math.min(elapsed, total).toFixed(1) + " / " + total.toFixed(1) + " s; excluded from final measurement.";
             } else if (msg.phase === "measuring") {
               $("download").textContent = "Measuring...";
-              $("downloadMeta").textContent = "Collecting the first 300 ms measurement window...";
+              $("downloadMeta").textContent = "Collecting the first 100 ms measurement window...";
             }
           } else if (msg.type === "sample") {
             addPoint(kind, msg.value, color);
             if (kind === "download" || kind === "upload") {
               addSpeedSample(kind, msg);
-              const displayValue = Number.isFinite(msg.displayValue) ? msg.displayValue : msg.value;
-              $(kind).textContent = displayValue.toFixed(2);
-              const windowSeconds = Number.isFinite(msg.displayWindowMs) ? (msg.displayWindowMs / 1000).toFixed(1) : "--";
-              const windowLabel = Number(msg.displayWindowMs) >= 1190 ? "1.2 s rolling" : windowSeconds + " s window";
-              $(kind + "Meta").textContent = "Current estimate: " + windowLabel + "; raw 300 ms samples remain in chart.";
+              const source = msg.source === "server-received" ? "Server received" : kind === "upload" ? "Browser send estimate" : "Client received";
+              const description=source + "; 0.5 s rolling display; 100 ms raw samples.";
+              if ($(kind + "Meta").textContent!==description) $(kind + "Meta").textContent=description;
             }
           } else if (msg.type === "result") {
             finishSpeedChart(kind, msg);
@@ -4560,11 +4798,13 @@
             worker.terminate();
             URL.revokeObjectURL(url);
             cleanup();
+            if (speedCharts[kind]) { speedCharts[kind].active = false; scheduleSpeedCharts(); }
             if (kind === "download" || kind === "upload") $(kind + "Meta").textContent = "Error: " + (msg.message || "worker speed test failed");
             reject(new Error(msg.message || "worker speed test failed"));
           }
         };
         worker.onerror = (err) => {
+          if (speedCharts[kind]) {speedCharts[kind].active=false;scheduleSpeedCharts();}
           worker.terminate();
           URL.revokeObjectURL(url);
           cleanup();

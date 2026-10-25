@@ -5,6 +5,7 @@ mod limits;
 mod rate;
 mod rtc;
 mod transport;
+mod upload_progress;
 mod web;
 
 use anyhow::{Context, Result};
@@ -54,7 +55,7 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(cfg.bind_addr()?)
         .await
         .context("bind HTTP listener")?;
-    info!(address = %listener.local_addr()?, "HTTP listener started");
+    info!(address = %listener.local_addr()?, web_ui = cfg!(feature = "web-ui"), "HTTP listener started");
     let rtc = RtcService::new(cfg.clone());
     let app = web::router(cfg.clone(), rtc.clone());
     let mut listener = DeadlineListener::new(listener, cfg.http_keep_alive_ms);

@@ -1,0 +1,35 @@
+# Documentation addresses only: replace them with your own public IP/domain.
+# IP certificates require successful CA validation and reliable automatic renewal.
+# The default_sni enables IP-literal clients, which normally send no SNI.
+{
+	default_sni 192.0.2.10
+	servers :443 {
+		protocols h1 h2
+	}
+}
+
+(measurement_agent) {
+	header Alt-Svc "clear"
+	@root path / /speed /speed/
+	redir @root https://speed.example.com/?node=jp 302
+	reverse_proxy 127.0.0.1:3010 {
+		header_up X-Real-IP {http.request.remote.host}
+		header_up X-Forwarded-For {http.request.remote.host}
+	}
+}
+
+https://192.0.2.10 {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			profile shortlived
+		}
+	}
+	import measurement_agent
+}
+
+# Optional direct DNS endpoint; omit until DNS and provider access are ready.
+# Its certificate policy remains independent of the short-lived IP certificate.
+https://node.example.net {
+	import measurement_agent
+}
