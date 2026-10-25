@@ -1,0 +1,43 @@
+# TEMPLATE ONLY: independent staging, not a replacement for any Rust unit.
+[Unit]
+Description=Speedtest C++ independent staging backend
+After=network.target
+
+[Service]
+Type=simple
+User=speedtest-cpp
+Group=speedtest-cpp
+WorkingDirectory=/opt/speedtest-cpp-staging
+ExecStart=/opt/speedtest-cpp-staging/current/speedtest-cpp
+EnvironmentFile=/etc/speedtest-cpp-staging.env
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=speedtest-cpp-staging
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+UMask=027
+# Initial safety ceilings, NOT measured sizing or a benchmark result.
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,51 @@
+# Independent staging layout (template, not a deployment)
+
+Production stays on Rust. Neither the templates nor local tests install a unit,
+change a production Caddy configuration, or switch traffic. The C++ HTTP binary
+is an intermediate build: native WebRTC and full acceptance are still pending.
+
+| Resource | Independent C++ staging value |
+|---|---|
+| Account | `speedtest-cpp` |
+| Release directories | `/opt/speedtest-cpp-staging/releases/<release-id>/` |
+| Current link | `/opt/speedtest-cpp-staging/current` |
+| Executable | `current/speedtest-cpp` |
+| Environment | `/etc/speedtest-cpp-staging.env` |
+| Service | `speedtest-cpp-staging.service` |
+| HTTP listener | `127.0.0.1:32132` |
+| Local reverse proxy | `http://127.0.0.1:32133`, separate Caddy instance |
+| Logs | Journal identifier `speedtest-cpp-staging`; separate proxy stdout |
+
+These names deliberately do not overlap the Rust service, release directory,
+environment file or listener. Both implementations can run simultaneously.
+The local proxy template does not request an ACME certificate or bind a public
+interface. An HTTPS example is commented out and uses a reserved domain.
+
+For a later authorized staging installation: build and test locally, record the
+binary hash/toolchain/dependency manifest, put the executable and its native
+runtime dependencies in a new immutable staging release directory, and verify
+that account ownership permits reads but no writes to the release. Create the
+separate account/environment/unit, validate the unit and Caddy configuration on
+the destination OS, then run the same direct and proxy HTTP/browser tests.
+Do not copy a sanitizer binary into a performance or deployment comparison.
+
+Retain the previous C++ release and update only its own `current` link atomically.
+Rollback changes that link back and restarts only `speedtest-cpp-staging`.
+Stopping/disabling this test service and its separate proxy must leave Rust
+running unchanged. Never alter existing Rust/Node backups to make a C++ release.
+
+The systemd template preserves the existing hardening approach: non-root user,
+read-only system/home protections, empty capabilities, bounded tasks/memory,
+restricted address families, journal logging and a ten-second stop limit above
+the five-second HTTP drain grace. Memory ceilings are initial containment, not
+measured capacity claims. WebRTC's future UDP ports/candidate mapping must be
+validated separately before any public staging session is offered.
+
+Template syntax is reviewable source, not proof of effective hardening, TLS,
+rollback, firewall or live service health. No production deployment or online
+switch has been performed as part of the C++ work.
+
+Local validation: `systemd-analyze verify --man=no` returned success for a scratch
+copy with only executable/working-directory paths changed to the local build.
+The source template was not installed. Caddy is unavailable locally, so its
+engine validation and live proxy/TLS tests remain unperformed.

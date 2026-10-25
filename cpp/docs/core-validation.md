@@ -5,13 +5,18 @@ HTTP/WebRTC server. Production remains Rust. No production route/service was
 modified. Original Rust sources and shared frontend were checked unchanged by
 SHA-256 before and after this milestone.
 
+Historical snapshot: commit `43bed72`, before the HTTP/config/limits/progress
+modules. “All current” below refers only to that snapshot. For the expanded
+source tree, use `http-validation.md`; its outstanding network analyzer findings
+must not be hidden by the earlier core result.
+
 ## Actual results
 
 | Check | Result | Scope |
 |---|---|---|
 | CMake Debug / CTest | Passed | Core self-test, strict base64, frame bounds, overflow, threading |
 | CMake Release / CTest | Passed | Same tests, optimized native Linux x86_64 |
-| Clang-Tidy | Passed | All current `src/*.cpp`, analyzer/bugprone/performance/modernize/concurrency categories |
+| Clang-Tidy | Passed | Core sources at `43bed72`, analyzer/bugprone/performance/modernize/concurrency categories |
 | ASan + UBSan / CTest | Passed | Separate instrumented core build |
 | TSan / CTest | Passed | Separate build including concurrent core calls |
 | Rust/C++ differential | 3065/3065 passed | Debug, Release, ASan/UBSan and TSan executables |

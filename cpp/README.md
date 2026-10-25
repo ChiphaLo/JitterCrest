@@ -6,14 +6,28 @@ WebRTC probes/control, cancellation/accounting, safety checks, shared-client
 integration tests and measured Rust/C++ benchmarks. A green core test is not a
 claim that those end-to-end requirements are complete.
 
+The native HTTP milestone is implemented: `speedtest-cpp` now listens on a
+separate port, serves UI or measurement-only builds, and independently handles
+download/upload streaming, upload progress, limits, client info and connection
+lifecycle. **Native WebRTC is not implemented yet**: signaling validation is
+present, but valid RTC requests fail closed with 503. Do not enable this binary
+as a production backend. See `docs/http-validation.md` for scoped test evidence
+and outstanding safety gates; `docs/core-validation.md` is the earlier core
+snapshot, not an all-current-source safety claim.
+
 ## Architecture and boundaries
 
 - C++20 pure core: owned 128-byte little-endian frames, UTF-16-compatible ID hash,
   nearest-index percentiles, density/accounting, pacing/executor summaries,
   bounded control fragmentation/reassembly and SDP/candidate filtering.
-- Asynchronous HTTP will use Boost.Asio/Beast, not a thread per connection.
-  Planned per-connection ownership covers socket, buffers, timers and in-flight
-  response; no borrowed span/string_view may outlive its owner in callbacks.
+- Asynchronous HTTP uses Boost.Asio/Beast coroutines, not a thread per connection.
+  Each connection owns its parser, bounded buffers, timers and socket on a
+  serialized executor; response payload views are retained through awaited writes.
+  Cancellation generations prevent stale timer callbacks closing a later request.
+- RAII leases reserve/release active capacity and refund unproduced fixed-download
+  bytes. Upload receipts own per-lane completion/failure. A bounded four-worker
+  provider pool isolates blocking HTTPS lookup I/O from the event loop; completion
+  work guards keep the executor alive until owned lookups finish.
 - WebRTC will use pinned **libdatachannel 0.24.6**, ICE/libjuice, DTLS/OpenSSL and
   SCTP/usrsctp. This is a native C/C++ transport, not a Rust wrapper or FFI.
   Reliable control and unordered zero-retransmission probes remain distinct.
@@ -39,15 +53,24 @@ boundary and schedule state changes through the owning executor.
 
 ## Current core build and tests
 
-On Linux, install CMake >=3.22, a C++20 compiler, Ninja, Boost.System >=1.74,
-OpenSSL >=3 and nlohmann-json >=3.11. The development environment used Ubuntu
-24.04, Clang 18.1.3, Boost 1.83, OpenSSL 3.0.13 and nlohmann-json 3.11.3.
+On Linux, install CMake >=3.22, a C++20 compiler, Ninja, Boost.System >=1.83,
+OpenSSL >=3, nlohmann-json >=3.11, Python 3 for asset generation/tests, and
+libcurl >=7.85 with asynchronous DNS support. Runtime never invokes Python,
+Rust or Node. The development environment used Ubuntu 24.04, Clang 18.1.3,
+Boost 1.83, OpenSSL 3.0.13, libcurl 8.5.0 and nlohmann-json 3.11.3.
 Distribution package revisions should be recorded with benchmark results.
 
 ```sh
 cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
 cmake --build cpp/build --parallel
 ctest --test-dir cpp/build --output-on-failure
+
+# Isolated local HTTP milestone, no production listener or RTC replacement:
+PORT=32132 SPEEDTEST_HOST=127.0.0.1 cpp/build/speedtest-cpp
+
+# Measurement-only executable; it does not embed/serve the frontend:
+cmake -S cpp -B cpp/build-agent -DCMAKE_BUILD_TYPE=Release -DSPEEDTEST_WEB_UI=OFF
+cmake --build cpp/build-agent --parallel
 
 cd cpp
 cmake --preset debug && cmake --build --preset debug && ctest --preset debug
@@ -130,8 +153,10 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 
 ## Remaining acceptance work (not yet achieved)
 
-1. HTTP/config/security/resource limits, full routes, client-info cache/providers,
-   request drain/timeouts/partial I/O, upload progress and graceful shutdown.
+1. Complete the remaining HTTP security/edge-case and resource-exhaustion matrix
+   beyond the tested milestone; complete probe-only profile and live TLS/proxy
+   verification. External provider behavior was tested with injected deterministic
+   fixtures, not declared validated against every third-party response.
 2. Native WebRTC signaling/session limits, cancellation/tombstones, probes,
    scheduler/grace accounting, result fragmentation and browser integration.
 3. Debug/Release plus all required sanitizer/static-analysis gates for the full
@@ -141,8 +166,10 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 5. Multi-round alternating Release benchmarks: throughput, CPU, idle/peak RSS,
    P50/P95/P99, concurrency, sustained stability and errors; separate computation,
    loopback HTTP and network results. No performance conclusion exists yet.
-6. Hardened independent systemd/Caddy staging templates, reproducible dependency
-   and deployment bundle, measured safety/performance reports and final verdict.
+6. Independent systemd/Caddy templates are provided in `deploy/`, with their
+   isolation/rollback design in `docs/staging.md`. Live staging, Caddy validation,
+   reproducible complete deployment bundle, measured reports and final verdict
+   remain pending. No template has been installed into production.
 
 Current core validation is a development milestone only. Full functionality,
 performance superiority and readiness to replace Rust remain unproven.
