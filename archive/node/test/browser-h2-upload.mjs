@@ -100,11 +100,23 @@ try {
     if (phase !== 'RTT complete') throw new Error(`initial page flow did not complete: ${phase}`);
     await command('Runtime.evaluate', { expression: 'document.getElementById("run").click()' });
     let evidence;
+    let liveDownload = false, liveUpload = false;
     for (let i = 0; i < 600; i++) {
       const reply = await command('Runtime.evaluate', { expression:
-        '({ phase: document.getElementById("phase").textContent, download: document.getElementById("downloadMeta").textContent, upload: document.getElementById("uploadMeta").textContent, log: document.getElementById("log").textContent.slice(-800) })',
+        `({ phase: document.getElementById("phase").textContent, download: document.getElementById("downloadMeta").textContent, upload: document.getElementById("uploadMeta").textContent, log: document.getElementById("log").textContent.slice(-800),
+          charts: ["download", "upload"].map(kind => {
+            const chart = document.getElementById(kind + "SpeedChart");
+            const result = chart.querySelector(".speed-result-line");
+            return {kind, samples: Number(chart.querySelector("svg").dataset.sampleCount),
+              result: result ? Number(result.dataset.resultMbps) : null,
+              horizontal: result ? result.getAttribute("y1") === result.getAttribute("y2") : false,
+              dashed: result ? result.getAttribute("stroke-dasharray") : null,
+              display: Number(document.getElementById(kind).textContent)};
+          }) })`,
       returnByValue: true });
       evidence = reply.result.value;
+      liveDownload ||= evidence.charts[0].samples >= 2 && evidence.charts[0].result === null;
+      liveUpload ||= evidence.charts[1].samples >= 2 && evidence.charts[1].result === null;
       if (evidence.phase === 'Speed complete' || evidence.phase === 'Speed error') break;
       await sleep(100);
     }
@@ -112,6 +124,11 @@ try {
     assert.equal(evidence.phase, 'Speed complete');
     assert.match(evidence.download, /Final; 1 stream; HTTP\/2/);
     assert.match(evidence.upload, /1 stream; steady/);
+    assert(liveDownload && liveUpload, 'both curves must render before their final results');
+    for (const chart of evidence.charts) {
+      assert(chart.samples >= 2 && chart.horizontal && chart.dashed);
+      assert(Math.abs(chart.result - chart.display) <= 0.0051);
+    }
     console.log('Original UI single-stream download and upload over Caddy HTTP/2 passed');
     if (process.argv.includes('--stability')) {
       // Exercise the actual page's stability button and report validator,

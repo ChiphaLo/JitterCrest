@@ -7,7 +7,6 @@ repository = "https://github.com/ChiphaLo/speedtest-rust"
 readme = "README.md"
 edition = "2024"
 rust-version = "1.96"
-build = "build.rs"
 
 [dependencies]
 anyhow = "1"

@@ -12,6 +12,6 @@ upstream vendor tests require external fuzz-artifact files not present in this
 source snapshot; the normal workspace unit suite excludes that vendor crate.
 
 Rust dependencies remain governed by their respective licenses. `Cargo.lock`
-records exact versions. `werift` and its npm dependencies are used for the Node
-reference/A-B clients and are not vendored here. Retain their notices when
-redistributing installed dependencies or a bundled application.
+records exact versions. The old Node/Werift reference and its npm dependencies
+are no longer part of this active source distribution. Any separately retained
+historical recovery archive must keep its original third-party notices.

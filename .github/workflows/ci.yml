@@ -1,4 +1,4 @@
-name: Rust and local compatibility
+name: Rust
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -10,14 +10,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --all-features --locked
       - run: cargo build --release --locked
-      - run: npm ci
-      - run: npm test
-      - run: node test/http-contract.mjs

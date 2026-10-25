@@ -24,14 +24,15 @@ production details in a public issue. Run `cargo audit` against a fresh advisory
 database. A clean scan is not a security guarantee; yanked-version warnings and
 other dependency lifecycle changes should also be reviewed.
 
-## Reference-only npm dependency warning
+## Archived Node reference
 
-The preserved Node/Werift A-B baseline is not the production runtime. At source
-publication, `npm audit` reports three high-severity dependency entries (`ip`,
+The old Node/Werift A-B source lives only under `archive/node/`, outside the active
+Rust build and CI. Installed npm dependencies are not committed; private recovery
+ZIPs retain them. This baseline must not be exposed to untrusted production traffic. At its original
+publication, `npm audit` reported three high-severity dependency entries (`ip`,
 `werift-ice`, `werift`) originating from `ip`'s improper public-address
-classification advisory. Do not expose the historical Node reference to untrusted
-production traffic; run it only in isolated compatibility tests. Its pinned
-dependency versions are retained to avoid changing the migration baseline.
+classification advisory. Archiving this baseline does not fix those dependencies;
+use it only in isolated compatibility/recovery tests.
 
 The Rust lockfile updates rustls to 0.23.46, fixing RUSTSEC-2026-0346 through
 RUSTSEC-2026-0349. A `yoke-derive 0.8.3` yanked-version warning remains a dependency

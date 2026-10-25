@@ -7,7 +7,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/server-regressions.test.js test/webrtc-contracts.test.js test/rtc-werift-dcep.test.mjs"
+    "test": "node --test test/server-regressions.test.js test/speed-charts.test.js test/webrtc-contracts.test.js test/rtc-werift-dcep.test.mjs"
   },
   "dependencies": {
     "werift": "0.23.0"

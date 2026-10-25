@@ -9,13 +9,13 @@ reports. English UI; Chinese deployment notes below.
 
 - `src/`: Tokio/Axum/Hyper HTTP service, limits, timeouts, signaling, frame codecs,
   statistics and session accounting.
-- `server.js` and `webrtc_contracts.js`: preserved Node reference and embedded
-  browser application. `build.rs` reads these files at **build time**; the Rust
-  executable does **not** launch Node at runtime.
+- `public/index.html`: standalone browser application and inline browser
+  contracts, embedded directly by Rust's `include_str!`. Building and running
+  the service requires neither Node.js nor npm nor a JavaScript build step.
 - `vendor/webrtc-sctp-0.17.1/`: service-specific SCTP compatibility fork, with its
   upstream MIT/Apache-2.0 notices retained. See [third-party notes](THIRD_PARTY.md).
-- `test/`: local protocol, HTTP and Node/Rust comparison clients. Some browser,
-  Caddy and Linux-specific probes need additional tools and are not the unit suite.
+- `tests/`: Rust frontend/HTTP integration checks and an optional headless browser
+  check against the actual Rust service over local Caddy HTTP/2.
 - `deploy/`: generic examples, not live infrastructure configuration.
 
 No credentials, SSH host tables, production snapshots, internal operational logs,
@@ -46,13 +46,56 @@ SPEEDTEST_HOST=127.0.0.1 PORT=3010 \
 curl -fsS http://127.0.0.1:3010/health
 ```
 
-Node 24 and npm are only needed for Node-reference/A-B tests:
+The default Cargo suite needs no Node installation. An optional real-browser
+check requires Python, Playwright/Chromium and Caddy (all test listeners are
+loopback-only; the test's self-signed TLS exception applies only to those listeners):
 
 ```sh
-npm ci
-node --test test/*.test.js
-node test/http-contract.mjs
+python -m pip install playwright
+python -m playwright install chromium
+python tests/throughput_worker.py
+python tests/browser_speed_charts.py --caddy /path/to/caddy
 ```
+
+The sanitized old Node source and its compatibility clients are available under
+[`archive/node/`](archive/node/). Installed npm dependencies and full operational
+recovery ZIPs remain private. The active source, Cargo build and Rust CI do not
+read or execute the archive.
+
+### Live speed charts
+
+Download and upload each have a live Mbps-over-time chart. Raw worker samples
+update the curve throughout the test; the final throughput is drawn as a horizontal
+dashed line only after that direction completes. Upload samples estimate
+browser-queued throughput; the final upload line uses server-accounted bytes.
+Restarting a test clears old chart data. Mobile and dark-mode layouts are supported.
+
+### High-speed transfer behavior
+
+The 256 KiB upload buffer and 512 KiB download chunk are reused throughout timed
+streams; they are not total test-file sizes. Single-stream upload runs for about
+12 seconds, including a 2-second warm-up; its final rate still uses the server's
+post-warm-up byte count and duration. Multi-stream final accounting is unchanged.
+The non-streaming multi-upload fallback reuses one immutable 4 MiB Blob across
+lanes and samples browser upload-progress events, not just completed-chunk ACKs.
+This avoids repeated BufferSource copies and prevents sparse whole-chunk ACKs
+from being mistaken for zero network throughput between responses.
+Upload sampling runs on a 300 ms timer: real stalled intervals remain zero, but
+sampling stops when production ends, before waiting for the server response.
+The UI explicitly shows this final accounting phase. Producers close at their
+deadline even without another pull; aborts/timeouts release their timers.
+
+Missing, malformed, zero or mismatched upload acknowledgements fail explicitly
+instead of becoming a successful zero-speed result. Download budget exhaustion
+fails the body rather than silently returning a shorter successful stream.
+Resource limits remain enabled: the default stream-upload cap is 2 GiB and each
+direction has a 4 GiB/IP byte budget over 60 seconds. Configure limits according
+to capacity; do not confuse the ordinary fixed-upload limit with the stream limit.
+
+For a local high-bandwidth regression, the browser test accepts
+`--download-mbps 400 --upload-mbps 400 --latency-ms 50 --streams 1` (or `4`).
+Add `--force-chunked` with multiple streams to exercise the compatibility path.
+These are browser-emulation limits, not a guarantee of achieved WAN bandwidth.
 
 Use isolated loopback instances for tests, not live production services. Do not
 publish port 3010 directly while trusting reverse-proxy headers.
@@ -84,8 +127,8 @@ selects the legacy dual-port HTTP/1.1 path on port 8443; `probe-only` selects th
 legacy RTT/stability-only path. Neither is in the default node list.
 `ENABLE_PROBE_ONLY_NODE=0` filters that optional node from an explicit node list.
 If using those specialized modes, adapt the example direct-page/return-page
-constants and the CSP in both `server.js` and `src/web.rs` to your own topology,
-then validate Node/Rust compatibility. Ordinary same-origin deployment needs none
+constants and the CSP in `public/index.html` and `src/web.rs` to your own topology,
+then validate browser/HTTP behavior. Ordinary same-origin deployment needs none
 of those specialized modes. Wire formats, statistics and resource limits have not
 been changed by anonymizing the deployment defaults.
 
@@ -96,8 +139,8 @@ older clients that cannot reassemble `controlFragment` messages. The default is
 **off**, preserving current fragmented transport. Result fields, sample precision,
 reason codes and density thresholds are not changed. Size/transport limits may
 prevent very large legacy reports; upgrade the client instead of weakening the
-validity checks. Existing historical Node pages can be embedded by building with
-their corresponding `server.js` / contract pair; do not silently mix versions.
+validity checks. For a historical client, use its matching page/contracts from
+the recovery archive; do not silently mix protocol versions.
 
 ## Architecture and limitations
 
@@ -114,9 +157,11 @@ their corresponding `server.js` / contract pair; do not silently mix versions.
 
 ## 中文说明
 
-这是 Node 测速服务的 Rust 服务端迁移。前端模板与契约在构建期嵌入，运行
-Rust 服务不依赖 Node 进程。请保留 `server.js`、`webrtc_contracts.js` 与 vendor
-目录，它们是可复现构建/A-B 的组成部分，而不是应删除的临时文件。
+这是 Node 测速服务的 Rust 服务端迁移。前端页面和浏览器契约现在位于
+`public/index.html`，由 Rust 直接嵌入；构建、运行以及 Cargo 测试均不依赖
+Node/npm。脱敏的旧 Node 源码位于 `archive/node/`，完整依赖恢复包另行私下保存，
+不参与当前构建。浏览器端
+JavaScript 仍负责实时图表和 WebRTC，这不意味着服务端运行 JavaScript。
 
 生产部署请使用自己的域名、节点配置、公网 IP 与凭据。仓库中的地址和节点名称
 已改为通用示例，默认只有同源本地节点；保留的特殊模式需按实际拓扑配置，

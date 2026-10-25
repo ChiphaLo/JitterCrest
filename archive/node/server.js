@@ -2952,6 +2952,13 @@ const INDEX_HTML = String.raw`<!doctype html>
     .speed-control-row button { min-width: 108px; min-height: 48px; font-size: 14px; }
     .speed-results-grid .panel, #speedTestContainer .panel { border-radius: 20px; background: var(--surface-secondary); box-shadow: none; }
     #speedTestContainer .value { font-size: clamp(46px, 6vw, 70px); }
+    .speed-results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .speed-results-grid > .panel { min-width: 0; }
+    .speed-timeline { margin-top: 18px; min-width: 0; }
+    .speed-timeline svg { display: block; width: 100%; height: 220px; font-family: var(--app-font); }
+    .speed-axis-label { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .speed-grid-line { stroke: var(--chart-grid); stroke-width: 1; }
+    .speed-result-label { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--surface-secondary); stroke-width: 4px; stroke-linejoin: round; }
     .loss-head { padding: 24px; border-color: var(--separator); }
     .loss-head h2 { color: var(--text-primary); font-size: clamp(25px, 3vw, 32px); font-weight: 650; letter-spacing: -.035em; }
     .loss-count { padding: 7px 10px; border-radius: 999px; background: var(--surface-secondary); color: var(--text-secondary); font-size: 12px; font-weight: 650; }
@@ -3009,7 +3016,7 @@ const INDEX_HTML = String.raw`<!doctype html>
       .speed-control-row h2 { width: 100%; }
       .speed-control-row label { margin-left: 0; }
       .speed-control-row select, .speed-control-row button { min-height: 48px; }
-      #speedTestContainer > div[style*="display:flex"] { gap: 14px !important; }
+      .speed-results-grid { grid-template-columns: 1fr; }
       .loss-head, .stability-toolbar, .stability-body { padding: 18px !important; }
       .stability-columns { grid-template-columns: 1fr; }
       .stability-card { padding: 14px; }
@@ -3128,16 +3135,18 @@ const INDEX_HTML = String.raw`<!doctype html>
               <button id="run" disabled>Start</button>
             </div>
           </div>
-          <div style="display:flex; gap:10px;">
+          <div class="speed-results-grid">
             <div class="panel metric" style="flex:1; margin:0;">
               <h2>Download</h2>
               <div><span class="value" id="download">--</span><span class="unit">Mbps</span></div>
               <div class="meta" id="downloadMeta"></div>
+              <div id="downloadSpeedChart" class="speed-timeline"></div>
             </div>
             <div class="panel metric" style="flex:1; margin:0;">
               <h2>Upload</h2>
               <div><span class="value" id="upload">--</span><span class="unit">Mbps</span></div>
               <div class="meta" id="uploadMeta"></div>
+              <div id="uploadSpeedChart" class="speed-timeline"></div>
             </div>
           </div>
         </div>
@@ -4044,6 +4053,97 @@ ${CONTRACT_INLINE_SOURCE}
       });
       parts.push("</svg>");
       container.innerHTML = parts.join("");
+    }
+    const speedCharts = {
+      download: { points: [], result: null, durationMs: 0, peak: 0 },
+      upload: { points: [], result: null, durationMs: 0, peak: 0 },
+    };
+    let speedChartFrame = null;
+    function scheduleSpeedCharts() {
+      if (speedChartFrame !== null) return;
+      speedChartFrame = requestAnimationFrame(() => {
+        speedChartFrame = null;
+        drawSpeedCharts();
+      });
+    }
+    function resetSpeedCharts() {
+      for (const chart of Object.values(speedCharts)) {
+        chart.points = [];
+        chart.result = null;
+        chart.durationMs = 0;
+        chart.peak = 0;
+      }
+      drawSpeedCharts();
+    }
+    function addSpeedSample(kind, sample) {
+      const chart = speedCharts[kind];
+      if (!chart || !Number.isFinite(sample.value) || sample.value < 0
+        || !Number.isFinite(sample.atMs) || sample.atMs < 0) return;
+      const last = chart.points[chart.points.length - 1];
+      if (last && sample.atMs <= last.atMs) return;
+      chart.points.push({ atMs: sample.atMs, value: sample.value });
+      // Bounded independently of the legacy mixed-unit live-measurement buffer.
+      if (chart.points.length > 512) chart.points.shift();
+      chart.durationMs = Math.max(chart.durationMs, sample.atMs);
+      chart.peak = Math.max(chart.peak, sample.value);
+      scheduleSpeedCharts();
+    }
+    function finishSpeedChart(kind, result) {
+      const chart = speedCharts[kind];
+      if (!chart) return;
+      chart.result = Number.isFinite(result.stable) && result.stable >= 0 ? result.stable : null;
+      if (Number.isFinite(result.ms)) chart.durationMs = Math.max(chart.durationMs, result.ms);
+      drawSpeedCharts();
+    }
+    function drawSpeedCharts() {
+      for (const kind of ["download", "upload"]) {
+        const container = $(kind + "SpeedChart");
+        if (!container) continue;
+        const chart = speedCharts[kind];
+        const width = Math.max(260, Math.round(container.clientWidth || 480));
+        const height = 220;
+        const left = 52, right = 12, top = 28, bottom = 42;
+        const plotWidth = width - left - right;
+        const plotHeight = height - top - bottom;
+        const seconds = Math.max(1, Math.ceil(chart.durationMs / 1000));
+        const peak = Math.max(1, chart.peak, chart.result || 0) * 1.15;
+        const magnitude = 10 ** Math.floor(Math.log10(peak));
+        const maximum = Math.ceil(peak / magnitude) * magnitude;
+        const x = (atMs) => left + atMs / (seconds * 1000) * plotWidth;
+        const y = (mbps) => top + plotHeight * (1 - mbps / maximum);
+        const color = kind === "download" ? "var(--accent)" : "var(--success)";
+        const title = kind === "download" ? "Download" : "Upload";
+        const formatTick = (value) => Number(value.toPrecision(3)).toString();
+        const parts = ['<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + title + ' speed over time" data-sample-count="' + chart.points.length + '">'];
+        parts.push('<title>' + title + ' speed over time</title>');
+        parts.push('<desc>Time in seconds; speed in Mbps. ' + (kind === "upload"
+          ? 'The curve estimates browser-queued throughput. The dashed line is the final server-accounted result.'
+          : 'The curve shows raw measured samples. The dashed line is the final timed throughput result.') + '</desc>');
+        parts.push('<text x="' + left + '" y="16" class="speed-axis-label">Mbps</text>');
+        for (let i = 0; i <= 4; i += 1) {
+          const value = maximum * i / 4;
+          const gridY = y(value).toFixed(2);
+          const tickX = x(seconds * 1000 * i / 4).toFixed(2);
+          parts.push('<line x1="' + left + '" y1="' + gridY + '" x2="' + (width - right) + '" y2="' + gridY + '" class="speed-grid-line"/>');
+          parts.push('<text x="' + (left - 8) + '" y="' + (y(value) + 4).toFixed(2) + '" text-anchor="end" class="speed-axis-label">' + formatTick(value) + '</text>');
+          parts.push('<text x="' + tickX + '" y="' + (height - bottom + 18) + '" text-anchor="' + (i === 0 ? 'start' : i === 4 ? 'end' : 'middle') + '" class="speed-axis-label">' + formatTick(seconds * i / 4) + '</text>');
+        }
+        parts.push('<path d="M' + left + ' ' + top + 'V' + (height - bottom) + 'H' + (width - right) + '" class="speed-grid-line" fill="none"/>');
+        parts.push('<text x="' + (left + plotWidth / 2).toFixed(2) + '" y="' + (height - 4) + '" text-anchor="middle" class="speed-axis-label">Time (s)</text>');
+        if (chart.points.length) {
+          const path = chart.points.map((point, i) => (i ? 'L' : 'M') + x(point.atMs).toFixed(2) + ' ' + y(point.value).toFixed(2)).join(' ');
+          parts.push('<path class="speed-sample-line" d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>');
+          const last = chart.points[chart.points.length - 1];
+          parts.push('<circle cx="' + x(last.atMs).toFixed(2) + '" cy="' + y(last.value).toFixed(2) + '" r="3" fill="' + color + '"/>');
+        }
+        if (chart.result !== null) {
+          const resultY = y(chart.result).toFixed(2);
+          parts.push('<line class="speed-result-line" x1="' + left + '" x2="' + (width - right) + '" y1="' + resultY + '" y2="' + resultY + '" stroke="' + color + '" stroke-width="1.75" stroke-dasharray="6 4" data-result-mbps="' + chart.result + '"/>');
+          parts.push('<text x="' + (width - right) + '" y="' + (y(chart.result) - 7).toFixed(2) + '" text-anchor="end" fill="' + color + '" class="speed-result-label">' + chart.result.toFixed(2) + ' Mbps</text>');
+        }
+        parts.push('</svg>');
+        container.innerHTML = parts.join('');
+      }
     }
     function addPoint(label, value, color) {
       state.points.push({ label, value, color });
@@ -5619,7 +5719,7 @@ ${CONTRACT_INLINE_SOURCE}
         const cut = Math.min(Math.floor(vals.length * 0.1), Math.floor((vals.length - 1) / 2));
         return avg(vals.slice(cut, vals.length - cut));
       }
-      function publishThroughputSample(history, startAt, endAt, bytes, concurrency) {
+      function publishThroughputSample(history, startAt, endAt, bytes, concurrency, atMs) {
         const elapsedMs = Math.max(1, endAt - startAt);
         const rawValue = fmtMbps(bytes, elapsedMs);
         const windowMs = 1200;
@@ -5640,6 +5740,7 @@ ${CONTRACT_INLINE_SOURCE}
         self.postMessage({
           type: "sample",
           value: rawValue,
+          atMs,
           displayValue,
           displayWindowMs: Math.min(windowMs, coveredMs),
           concurrency,
@@ -5715,7 +5816,7 @@ ${CONTRACT_INLINE_SOURCE}
           const delta = totalBytes - lastBytes;
           const mbps = fmtMbps(Number(delta), dt);
           if (Number.isFinite(mbps) && now - started >= warmupMs && delta > 0n) {
-            const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency);
+            const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency, now - started);
             samples.push(sample.rawValue);
             sampleDetails.push({ value: sample.rawValue, bytes: Number(delta), elapsedMs: sample.elapsedMs, atMs: now - started });
           }
@@ -5813,7 +5914,7 @@ ${CONTRACT_INLINE_SOURCE}
               const sampleBytes = Number(totalBytes - lastSampleBytes);
               const sample = fmtMbps(sampleBytes, now - lastSampleAt);
               if (Number.isFinite(sample) && sample > 0) {
-                const published = publishThroughputSample(displayHistory, lastSampleAt, now, sampleBytes, 1);
+                const published = publishThroughputSample(displayHistory, lastSampleAt, now, sampleBytes, 1, now - measurementStartAt);
                 samples.push(published.rawValue);
                 sampleDetails.push({ value: published.rawValue, bytes: sampleBytes, elapsedMs: published.elapsedMs, atMs: now - measurementStartAt });
               }
@@ -5907,7 +6008,7 @@ ${CONTRACT_INLINE_SOURCE}
             sampleBytes += chunk.byteLength;
             if (now - lastSampleAt >= sampleMs) {
               const mbps = fmtMbps(sampleBytes, now - lastSampleAt);
-              const published = publishThroughputSample(displayHistory, lastSampleAt, now, sampleBytes, 1);
+              const published = publishThroughputSample(displayHistory, lastSampleAt, now, sampleBytes, 1, now - started);
               samples.push(published.rawValue);
               sampleDetails.push({ value: published.rawValue, bytes: sampleBytes, elapsedMs: published.elapsedMs, atMs: now - started });
               sampleBytes = 0;
@@ -5986,7 +6087,7 @@ ${CONTRACT_INLINE_SOURCE}
           totalBytes += BigInt(payload.byteLength);
           const mbps = fmtMbps(payload.byteLength, ms);
           samples.push(mbps);
-          self.postMessage({ type: "sample", value: mbps });
+          self.postMessage({ type: "sample", value: mbps, atMs: performance.now() - started });
         }
 
         const totalMs = Math.max(1, performance.now() - started);
@@ -6074,7 +6175,7 @@ ${CONTRACT_INLINE_SOURCE}
           const mbps = fmtMbps(Number(delta), dt);
           if (Number.isFinite(mbps) && now - started >= warmupMs && delta > 0n) {
             samples.push(mbps);
-            self.postMessage({ type: "sample", value: mbps, concurrency });
+            self.postMessage({ type: "sample", value: mbps, concurrency, atMs: now - started });
           }
           lastAt = now;
           lastBytes = totalBytes;
@@ -6136,7 +6237,7 @@ ${CONTRACT_INLINE_SOURCE}
           const mbps = fmtMbps(Number(delta), dt);
           if (Number.isFinite(mbps) && now - started >= warmupMs && delta > 0n) {
             samples.push(mbps);
-            self.postMessage({ type: "sample", value: mbps, concurrency });
+            self.postMessage({ type: "sample", value: mbps, concurrency, atMs: now - started });
           }
           lastAt = now;
           lastQueuedBytes = queuedTotalBytes;
@@ -6297,6 +6398,7 @@ ${CONTRACT_INLINE_SOURCE}
           } else if (msg.type === "sample") {
             addPoint(kind, msg.value, color);
             if (kind === "download" || kind === "upload") {
+              addSpeedSample(kind, msg);
               const displayValue = Number.isFinite(msg.displayValue) ? msg.displayValue : msg.value;
               $(kind).textContent = displayValue.toFixed(2);
               const windowSeconds = Number.isFinite(msg.displayWindowMs) ? (msg.displayWindowMs / 1000).toFixed(1) : "--";
@@ -6304,6 +6406,7 @@ ${CONTRACT_INLINE_SOURCE}
               $(kind + "Meta").textContent = "Current estimate: " + windowLabel + "; raw 300 ms samples remain in chart.";
             }
           } else if (msg.type === "result") {
+            finishSpeedChart(kind, msg);
             worker.terminate();
             URL.revokeObjectURL(url);
             cleanup();
@@ -6395,6 +6498,9 @@ ${CONTRACT_INLINE_SOURCE}
       state.timer = setInterval(() => { $("elapsed").textContent = ((performance.now() - state.start) / 1000).toFixed(1) + "s"; }, intervalMs);
     }
     function clearRttUi() {
+      resetSpeedCharts();
+      $("downloadMeta").textContent = "";
+      $("uploadMeta").textContent = "";
       $("log").textContent = "";
       state.points = [];
       state.latency = null;
@@ -6448,6 +6554,11 @@ ${CONTRACT_INLINE_SOURCE}
       state.download = null;
       state.upload = null;
       state.speedDiagnostics = {};
+      resetSpeedCharts();
+      $("download").textContent = "--";
+      $("upload").textContent = "--";
+      $("downloadMeta").textContent = "";
+      $("uploadMeta").textContent = "";
       startTimer();
       try {
         lockSpeedTest(session);
@@ -6505,6 +6616,11 @@ ${CONTRACT_INLINE_SOURCE}
     $("run").addEventListener("click", run);
     drawChart();
     drawLatencyPlot([], []);
+    drawSpeedCharts();
+    if (typeof ResizeObserver !== "undefined") {
+      const speedChartObserver = new ResizeObserver(scheduleSpeedCharts);
+      for (const kind of ["download", "upload"]) speedChartObserver.observe($(kind + "SpeedChart"));
+    }
 
     // Game Stability Analysis Code
     function clamp(value, min, max) {

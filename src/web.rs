@@ -23,7 +23,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-const PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+const PAGE: &str = include_str!("../public/index.html");
 const ICON: &[u8] = include_bytes!("../public/favicon.svg");
 const CHUNK_SIZE: usize = 512 * 1024;
 
@@ -366,6 +366,9 @@ fn stream_download(app: &App, ip: &str, millis: u64, lease: Lease) -> Response<B
             if tokio::time::Instant::now() >= deadline { break; }
             if !limits.consume(&ip, CHUNK_SIZE as u64, Direction::Download, &cfg) {
                 warn!("download byte budget exceeded");
+                // Headers have already been sent. Fail the body rather than
+                // turning a quota-truncated transfer into a successful EOF.
+                yield Err::<Bytes, _>(std::io::Error::other("download byte budget exceeded"));
                 break;
             }
             yield Ok::<_, std::io::Error>(payload.clone());
@@ -441,6 +444,11 @@ async fn upload(
                 );
             }
         };
+        // Empty DATA frames must not start the first-byte/warmup clocks or
+        // create a positive-duration, zero-byte final measurement.
+        if chunk.is_empty() {
+            continue;
+        }
         if !app
             .limits
             .consume(ip, chunk.len() as u64, Direction::Upload, &app.cfg)
