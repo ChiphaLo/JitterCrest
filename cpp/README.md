@@ -29,8 +29,10 @@ measurements or evidence authorizing a production replacement.
 
 The central-UI/independent-agent HTTPS IP and finite resource-exhaustion matrix
 is documented in `docs/agent-resource-validation.md`. All four Rust/C++ UI/agent
-combinations passed in Release, ASan/UBSan and TSan profiles; positive public-NAT
-probe-only connectivity and the remaining acceptance gates are still pending.
+combinations passed in Release, ASan/UBSan and TSan profiles. Subsequent guarded
+VPS tests demonstrated actual public-NAT probe-only connectivity and independent
+runtime portability, but also retained unresolved real-network transport
+failures; see `docs/public-staging-validation.md`. Full acceptance remains open.
 
 The two remaining Clang18/Boost coroutine diagnostics now have an exact reduced
 fixture, AST/CFG evidence, known-bad controls and a four-profile runtime lifetime

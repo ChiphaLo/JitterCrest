@@ -1,5 +1,12 @@
 # Independent staging layout (template, not a deployment)
 
+**Subsequent evidence:** guarded temporary units on three actual VPS hosts have
+now been exercised without changing the production Rust/Caddy units or routes.
+See `public-staging-validation.md` for actual checks, staged backout, preserved
+failures and unresolved network observations. The generic permanent unit below
+was not installed as a production service; the earlier local-only statements
+below describe the template milestone, not an absence of later staging tests.
+
 Production stays on Rust. Neither the templates nor local tests install a unit,
 change a production Caddy configuration, or switch traffic. The C++ HTTP binary
 is an intermediate build: native WebRTC is implemented but its complete safety,
