@@ -295,3 +295,10 @@ probe reliability, deadlines, counts or density gates. Earlier boundary-package
 hashes predate this change; new packages and public-role acceptance are pending.
 The [staging capacity guard](docs/staging.md#complete-temporary-copy-admission)
 also prevents spending the protected reserve on omitted temporary copies.
+
+New source019ff packages and their **new** native-Windows public4-combination /
+8-case profile have now passed, with fresh Restart IDs,20 exact probe denials,
+actual remote artifact/library identities, full copy budgets and independent
+post-cleanup production checks. See [current release validation](docs/recovery-release-validation.md).
+Current performance revalidation and the final objective audit remain pending;
+Rust production has not been switched and no main merge has occurred.

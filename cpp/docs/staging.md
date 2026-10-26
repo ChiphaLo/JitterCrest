@@ -86,6 +86,15 @@ unchanged. The source archive used for this size calculation was an older
 boundary candidate, not a claimed deployment of the newer RTC correction.
 No reserve was lowered and no remote cleanup was performed by that exercise.
 
+Subsequently, two exact obsolete non-live acceptance extracts were retired only
+after full archive/file/mode and live-use verification, preserving their recovery
+archives, logs and reference/proxy copies. The cache policy for those two obsolete
+versions explicitly changed to archive-backed recovery rather than keeping a
+resident extraction per hash. The newer three-host run then verified its complete
+budgets and retained reserve after copying/preparing. See
+[current release validation](recovery-release-validation.md); production files
+and unrelated services were not removed or changed.
+
 Local validation: `systemd-analyze verify --man=no` returned success for a scratch
 copy with only executable/working-directory paths changed to the local build.
 The source template was not installed. A local extracted Ubuntu Caddy 2.6.2

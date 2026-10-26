@@ -5,6 +5,12 @@ candidate-address fixture. **It is not a production cutover or full acceptance.*
 Original successes and failures are retained privately; later successes do not
 turn an earlier failed transaction into a pass.
 
+**Latest source profile:** [recovery release validation](recovery-release-validation.md)
+records newly built source019ff packages and a new native-Windows public8/8
+matrix, including fresh Restart session/test IDs,20 exact probe-denial proofs,
+full storage budgets and independent post-cleanup production checks. It does not
+relabel the older package hashes or failed traces below.
+
 ## Isolation and authoritative checks
 
 Three existing x86_64 hosts were tested: a Debian 13 UI host, an Ubuntu 24.04

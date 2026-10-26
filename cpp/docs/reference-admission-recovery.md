@@ -96,8 +96,9 @@ previous full-HTTP Clang18/Boost model findings remain explicitly nonzero and
 audited, not silently suppressed or declared clean. Core/parser sources were
 unchanged; the earlier finite20000-run core fuzz scope is not expanded here.
 
-The source is not yet a current deployed release. Earlier boundary-candidate
-archive hashes predate these settings. New independent packages, current public
-multi-host role acceptance, final objective audit and conditional production
-deployment with Rust rollback remain pending. No main merge or production
-cutover was performed by this correction.
+The source is not yet a current production release. Earlier boundary-candidate
+hashes predate these settings. New independent packages and a fresh current-source
+public4-combination/8-case profile have subsequently passed; see
+[release validation](recovery-release-validation.md). Current performance
+revalidation, final objective audit and conditional deployment with Rust rollback
+remain pending. No main merge or production cutover was performed.

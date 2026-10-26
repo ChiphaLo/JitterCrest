@@ -3,6 +3,8 @@
 **Version scope:** these hashes predate the later
 [RTC admission/recovery correction](reference-admission-recovery.md).
 They must not be deployed or described as packages of that newer source.
+New source019ff packages and their separate current public checks are recorded
+in [recovery release validation](recovery-release-validation.md).
 
 Three independent Linux x86_64 candidates were built from public source commit
 `400078fd3bf3d0ceab5da4816eae57a9d0d5b8e6`, not by renaming older archives.

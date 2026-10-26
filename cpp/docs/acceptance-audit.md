@@ -15,14 +15,14 @@ remain protected. A source commit or a passing subset does not authorize cutover
 | 4 — HTTP/API/wire/statistics | 126 paired HTTP contracts including10KiB/100KiB/1MiB, streaming/progress/status/headers/CORS;128-byte native frames;20pps×2s and100pps×20s; core3065 differential vectors and configuration521 | Native message negotiation/read-boundary defects were newly corrected. New bundles/public checks must carry that source, not old artifacts |
 | 4 — client-computed metrics | Actual-served helper arithmetic510 vectors: percentiles, scaled MAD, adjacent-difference mean, population standard deviation, strict timing thresholds and trimmed stable throughput | Shared unchanged frontend, not invented C++/Rust server calculations or a mocked RTC pass. Numeric tolerance is1e-12 relative/absolute |
 | 5 — framework/module design | README documents Beast incremental I/O/lifetimes, native WebRTC selection, pure protocol/statistics separation and mature dependencies | No speculative custom allocator/assembly/SIMD or claim that C++ must be faster |
-| 6 — I/O/concurrency/resources | HTTP/lifecycle/resource contracts; native admission/expiry/FIFO/control/byte limits; close/replacement/shutdown; bounded sends; source-backed reference-scale RTC admission/recovery correction | Coupled settings pass fresh finite recovery and affected safety suites. Current public role acceptance remains required; no universal network equivalence claim |
+| 6 — I/O/concurrency/resources | HTTP/lifecycle/resource contracts; native admission/expiry/FIFO/control/byte limits; close/replacement/shutdown; bounded sends; source-backed reference-scale RTC admission/recovery correction | Coupled settings pass finite recovery/safety and a new current-source native-Windows public8/8 profile. No universal network equivalence claim |
 | 7 — timing/performance design | Monotonic scheduler/executor samples, exact sequence/ACK identity, real partial-reliability loss tests, measured throughput/CPU/RSS | Do not treat enqueue acceptance as proof of wire delivery; no timeout or density gate was relaxed |
 | 8 — preserve Rust | Protected-source/vendor/frontend manifests; independent VPS before/after process, binary, unit, Caddy and release snapshots | No production switch or main merge has occurred |
 | 9 — shared compatibility clients | Shared deterministic core/HTTP/native browser clients; invalid/truncated/duplicate/reordered/half-close/cancellation/resource scenarios; original failures retained | Shared post-result late-ACK limitation and adverse-path failures are documented, not silently repaired in Rust |
 | 10 — fair benchmarks | Five alternating core rounds, three HTTP rounds, per-backend300s mixed load and actual1/16/64/128 connections; separate36-case Internet experiment with independent remote CPU/RSS | Reports identify pre-message-cap `cd514ed` artifacts. They are not measurements of later executables or statistical proof of language superiority |
 | 11 — builds/toolchain | Debug/Release/separate ASan+UBSan/TSan presets, pinned native bootstrap, standalone source builds and relocation archives, clang-format/tidy configuration | Linux x86_64 verified. Linux aarch64 is not claimed built/run; conditional hardware/toolchain coverage remains explicit |
 | 12 — safety | Separate sanitizer runtime suites, actual native mbuf regression,20,000 finite core fuzz runs; reduced coroutine fixture and negative controls | Full raw HTTP Tidy still has two audited Clang18/Boost model findings; it is not a clean full-service result. System OpenSSL/libcurl are not claimed fully source-instrumented |
-| 13 — deployment | Separate systemd/Caddy/env templates; UI/agent/generic roles; bundle/license/source checks and staging/backout; complete temporary-copy admission with a protected reserve | Earlier boundary bundles pass local checks but predate the latest RTC correction. New packages and current public role matrix remain pending. Preserve Rust rollback and unrelated services |
+| 13 — deployment | Separate systemd/Caddy/env templates; UI/agent/generic roles; new source019ff packages/relocation/native recovery; current public4-combination8/8 and protected copy-budget/cleanup checks | Old boundary/fairness artifacts retain their scopes. Production cutover has not occurred; preserve Rust rollback and unrelated services |
 | 14 — actual implementation flow | Sources, real builds, tests, comparison, sanitizers, benchmark data and technical reports exist rather than a demo/design-only handoff | Finishing documentation must not replace resolving or explicitly auditing remaining objective gates |
 | 15 — delivery/final decision | README and linked architecture/build/compatibility/safety/resource/performance/deployment reports; generic public source and test clients | Final overall acceptance and conditional merge/production deployment are **not yet achieved** |
 
@@ -73,6 +73,15 @@ remain protected. A source commit or a passing subset does not authorize cutover
 - Complete staging-copy accounting now includes archive, extraction, reference,
   proxy and metadata **in addition to** the768MiB reserve. Windows/Linux unit8
   and an actual read-only live rejection passed without remote mutation.
+- Current source019ff was subsequently rebuilt into three independent packages.
+  Each passed relocated native message/recovery checks; both normal UI roles
+  passed fresh-offer Restart. A new native-Windows public profile passed all8
+  node cases/four mixed backend combinations and20 exact denial proofs, with
+  fresh Restart session and direction test IDs. Complete copy budgets, actual
+  remote executable/library identities, retained reserve and independent
+  post-cleanup production snapshots passed. See
+  [current release validation](recovery-release-validation.md). The versioned
+  performance/final objective audit remains pending, not production cutover.
 
 ## Answers supported by the measured scope
 
