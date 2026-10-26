@@ -217,12 +217,14 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 
 ## Remaining acceptance work (not yet achieved)
 
-1. Resolve the remaining public probe-agent control failures without relaxing
-   protocol deadlines or the .99 scheduler-density gate. The actual public
-   central UI/data-agent flow passed four mixed Rust/C++ combinations, while the
-   probe-agent transaction is still incomplete. See
-   [public staging](docs/public-staging-validation.md) for both passing subcases
-   and retained failures, including the dual-ended WSL return-path evidence.
+1. Include the remaining adverse-path/control observations in final acceptance
+   without relaxing protocol deadlines or the .99 scheduler-density gate.
+   The current native-Windows public central/multiple-agent profile passed all
+   eight node cases and four mixed Rust/C++ combinations, including probe-only
+   and data roles. This does not erase failures on the earlier Hong Kong-browser
+   path or the controlled severe-outage timing difference. See
+   [public staging](docs/public-staging-validation.md) for the exact positive
+   profile and retained failures, including dual-ended return-path evidence.
    A newer unchanged-bundle header diagnostic established upstream record gaps
    between the browser-host egress and probe-host ingress for both backends,
    while only two of eight pages completed. It also closed the failed-page

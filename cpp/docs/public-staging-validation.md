@@ -413,3 +413,48 @@ timeout or density gate was changed. All temporary units/listeners, browser
 containers and ephemeral secrets were removed; an independent post-cleanup
 check again verified unchanged production on all three hosts. Main merge and
 production cutover remain pending full acceptance and final requirements audit.
+
+### Native Windows browser: current four-combination profile passed
+
+The same official preserved-frontend UI and agent bundles were subsequently
+tested from the workstation's existing **native Windows headless Chromium
+151.0.7922.34**, with GPU disabled. No browser proxy, host route, DNS or production
+configuration was changed. This is a distinct client/path profile, not another
+attempt to relabel the failed Hong Kong-browser measurements as successful.
+The selected ICE pairs used real public-IP UDP; the HTTPS origins, cross-site
+requests and scoped ephemeral certificate pins remained real.
+
+| Central UI / both agents | Probe-only node | Data node |
+|---|---|---|
+| C++ / C++ | Passed | Passed |
+| Rust / Rust | Passed | Passed |
+| Rust / C++ | Passed | Passed |
+| C++ / Rust | Passed | Passed |
+
+**All eight node cases and all four complete combinations passed** in the
+predeclared schedule, without retry-until-green. Each case checked valid automatic
+RTT, the actual Restart button and valid restarted RTT, then the unchanged
+100 packets/s × 20 seconds stability flow. Both directions planned 2,000 probes
+and retained the original .99 scheduler-density gate and frontend accounting
+validation. The data-node cases also completed the actual browser payload and
+progress contracts. The four probe-node cases each had five independent,
+nonce-matched proxy OPTIONS404 proofs and no subsequent payload request.
+
+The original frontend assets and server bundles were not edited. A browser-only
+metadata observer wrapped native calls without replacing the protocol or using
+frontend test hooks; its separate real-native smoke test preserved send errors
+and `instanceof` behavior. No server tracing/instrumentation was added. This is
+a finite functionality/configuration acceptance result, **not** an uninstrumented
+rendering benchmark, throughput comparison, universal Internet reliability proof
+or evidence that the shared late-receipt baseline limitation was repaired.
+The earlier encrypted-record gaps and severe-outage observations remain retained
+and must be included in the final compatibility/requirements decision.
+
+All three targets' temporary services, listeners and ephemeral TLS/config secrets
+were removed; all four local browser token files were removed. Production
+process/start identities, binaries, units, current links and Caddy configuration
+matched their before-images. A subsequent independent SSH check corroborated
+cleanup and unchanged production on all three targets. The current native
+deployment-profile check is now positive; fresh current-build performance work,
+the final requirement-by-requirement audit and the conditional merge/production
+cutover are separate, still-pending steps.
