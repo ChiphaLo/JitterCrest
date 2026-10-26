@@ -184,6 +184,60 @@ production release. No branch merge or production switch has occurred.
 
 ## Reproduction and remaining boundary
 
+### Controlled probe-agent metadata follow-up
+
+A subsequent bounded diagnostic used a throwaway, locally compiled C++ source
+clone with control-message metadata logging, plus a browser observer. The
+official C++ source, Rust reference and frontend remained unchanged. The clone
+passed eight CTests; a real local DTLS/SCTP smoke test verified the observer,
+native send exceptions, ordinary construction and `instanceof`. Neither observer changed probe
+scheduling, deadlines, completion accounting or retry policy. Logging can still
+perturb timing: this diagnostic artifact is **not** a release/performance build
+or a substitute for uninstrumented acceptance.
+
+The metadata observers recorded only message type, direction, opaque numeric measurement hashes, fragment
+index/count, queue counters and timestamps were recorded; no control bodies,
+probe payloads, SDP or ICE credentials were logged by those observers. Ordinary
+frontend measurement results were retained separately as private evidence. The fixed schedule for each
+backend was two RTT-only pages and two pages with automatic RTT followed by
+100 packets/s × 20 seconds stability, irrespective of earlier outcomes.
+
+- All four C++ diagnostic pages completed. Six measurement admissions had
+  matching browser/server `downStart` and ready records; received upload
+  completions and result-fragment counts also matched. Server ready-handler
+  acceptance took 0.120–0.241 ms, and the observed native control buffered amount
+  was zero. These are diagnostic handler observations, not end-to-end latency
+  or proof that a prior transport stall was repaired.
+- Three of four unchanged Rust pages completed. The remaining page completed
+  its automatic RTT, then failed the subsequent stability connection's
+  **application probe**. Three candidate peers had successful ICE/DTLS/SCTP
+  state but no returned probe frames before the original application-probe
+  deadline. The observer saw successful JavaScript send calls; those alone do
+  not prove wire delivery, as some native channel counters were still zero.
+  No stability `downStart` was sent for those failed peers. This observation
+  must not be mislabeled a missing ready reply or upload completion in that run.
+- Both implementations' five probe-only payload endpoints were independently
+  checked over HTTPS and denied. All **40 browser denial observations** were
+  additionally corroborated by exact nonce-matched proxy OPTIONS404 records,
+  the central Origin and real cross-site provenance, with no subsequent payload
+  method observed for the same nonce. Six verifier tests include negative
+  controls for missing HTTP proof, wrong status/origin, an unexpected actual
+  payload request, missing nonce and duplicate observations.
+
+`tests/probe_denial_contract.py` now distinguishes a returned HTTP404 from a
+browser fetch rejection. A TypeError alone remains insufficient: TLS, network
+failure and CORS can all produce it. The helper requires independent exact
+request evidence rather than synthesizing a successful response object. Run
+`python3 cpp/tests/probe_denial_contract_test.py` for its deterministic tests.
+
+The earlier C++ ready timeout was not reproduced; its cause remains unproven.
+The earlier Rust missing-completion result is likewise preserved, not explained
+away by the different application-probe failure above. No Rust repair was mixed
+into the migration. Diagnostic success does not promote the earlier failed
+transactions to passes. Both hosts' production snapshots still matched after
+temporary units, listeners, browser containers and authorization/key files were
+removed; no production deployment or branch merge occurred.
+
 Use only an explicitly authorized, isolated endpoint and private evidence paths:
 
 ```sh
