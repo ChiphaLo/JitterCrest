@@ -38,6 +38,17 @@ test; see `docs/coroutine-analysis.md`. The raw full-service Tidy command still
 reports those two findings and is **not** mislabeled a clean pass. No checker or
 warning was suppressed to obtain this classification.
 
+The additional native admission/expiry/FIFO/resource suite and the diagnosed
+OpenSSL DTLS close-notify lifetime regression are documented in
+`docs/rtc-resource-validation.md`. The dependency patch sends the close alert
+before last-owner teardown; it does not weaken the browser closure deadline or
+modify the Rust/reference protocol. Resource, repeated-close and wire suites
+remain distinct acceptance checks.
+
+Independent binary/runtime bundling and deterministic archives are described in
+`docs/release-bundle.md`. Packaging never installs a service or authorizes a
+production switch; relocation and target-host tests remain required.
+
 ## Architecture and boundaries
 
 - C++20 pure core: owned 128-byte little-endian frames, UTF-16-compatible ID hash,

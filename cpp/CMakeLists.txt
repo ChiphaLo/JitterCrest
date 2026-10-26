@@ -39,6 +39,10 @@ if(SPEEDTEST_LTO)
   if(NOT IPO_OK)
     message(FATAL_ERROR "LTO unavailable: ${IPO_ERROR}")
   endif()
+  # Every later consumer of the bitcode static core needs the matching link
+  # flags, including support tests. Otherwise an IPO-capable compiler can pass
+  # the configure probe while a non-IPO test fails to link the core archive.
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
   set_property(TARGET speedtest_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 endif()
 include(CTest)
