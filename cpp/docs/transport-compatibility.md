@@ -33,10 +33,14 @@ boundaries. C++ now sets the native association retry budget to the maximum
 16-bit value **before native preload**, retaining its existing application
 peer/session deadlines. This is not an unlimited application lifetime.
 
-This does **not** change unordered probe messages' `maxRetransmits=0`, change the
-probe schedule, extend frontend timeouts, or override the native RTO defaults.
-An experimental full reference-RTO override was rejected after measured
-periodic-loss result tails worsened. No such RTO override is in the source.
+That retry-only milestone did **not** change unordered probe messages'
+`maxRetransmits=0`, probe schedules, frontend timeouts or native RTO defaults.
+An early full reference-RTO experiment was rejected after its periodic-loss
+tail worsened; that versioned failure remains retained. The later
+[reference-scale admission/recovery correction](reference-admission-recovery.md)
+now combines the exact reference RTO values with bounded native admission,
+following fresh corrected-source comparison, repetitions and safety checks.
+No application deadline, density gate or per-message zero-retry policy changed.
 
 A controlled loopback encrypted-UDP relay, applying the same 60 ms one-way delay
 and declared drop policies to both backends, demonstrated the old early-close

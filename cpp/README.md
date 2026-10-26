@@ -286,3 +286,12 @@ have now passed their own [local build/relocation checks](docs/corrected-candida
 including real paired message boundaries and fresh-offer-correlated normal UI
 Restart. Their public multi-host role acceptance and the adverse-path gate are
 still pending; no main merge or production cutover has occurred.
+
+The latest [reference-scale RTC admission/recovery correction](docs/reference-admission-recovery.md)
+combines reference RTO values with bounded native admission. Fixed comparisons,
+an old-executable negative control and new four-profile/affected sanitizer
+suites verify the recorded timely-incomplete-result regression without changing
+probe reliability, deadlines, counts or density gates. Earlier boundary-package
+hashes predate this change; new packages and public-role acceptance are pending.
+The [staging capacity guard](docs/staging.md#complete-temporary-copy-admission)
+also prevents spending the protected reserve on omitted temporary copies.

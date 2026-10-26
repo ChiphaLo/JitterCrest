@@ -1,5 +1,9 @@
 # Boundary-corrected candidates — local validation
 
+**Version scope:** these hashes predate the later
+[RTC admission/recovery correction](reference-admission-recovery.md).
+They must not be deployed or described as packages of that newer source.
+
 Three independent Linux x86_64 candidates were built from public source commit
 `400078fd3bf3d0ceab5da4816eae57a9d0d5b8e6`, not by renaming older archives.
 That commit's runtime code includes the negotiated64KiB / native65535-byte

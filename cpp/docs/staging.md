@@ -54,6 +54,38 @@ Template syntax is reviewable source, not proof of effective hardening, TLS,
 rollback, firewall or live service health. No production deployment or online
 switch has been performed as part of the C++ work.
 
+## Complete temporary-copy admission
+
+Before uploading or creating a temporary stage, measure and add **all** of:
+compressed candidate archive, expanded files, copied Rust reference, copied
+proxy binary, metadata/filesystem-growth margin and retained free-space reserve.
+An `expanded * 2` estimate is not sufficient: compression, reference and proxy
+sizes are independent. Existing production storage is not part of the budget
+available for these copies.
+
+`deploy/staging_capacity.py` is a pure, immutable byte-accounting helper; it
+does not connect, copy, remove, install or change services. Inputs must be
+nonnegative integer counts, not booleans/floats/NaN. It refuses to lower the
+16 MiB metadata margin or768 MiB retained reserve. Copy costs are added to that
+reserve rather than paid out of it. For example70+104+13+50 MiB in copies needs
+1021 MiB free with the default margin/reserve; the older estimate could admit
+less than that. Recheck actual free space after copies, allowing for remaining
+metadata, and after preparing a stage. Concurrent external disk growth can
+still require aborting, not spending the reserve.
+
+```sh
+python3 cpp/tests/test_staging_capacity.py
+```
+
+Eight unit tests, including invalid inputs and exact admission boundaries,
+passed on Windows and Linux. A separate **read-only** exercise of the actual
+private staging admission method found approximately907 MiB free versus1020 MiB
+required for the measured agent footprint and rejected admission. It created
+no remote directory, upload, unit or listener; the production snapshot was
+unchanged. The source archive used for this size calculation was an older
+boundary candidate, not a claimed deployment of the newer RTC correction.
+No reserve was lowered and no remote cleanup was performed by that exercise.
+
 Local validation: `systemd-analyze verify --man=no` returned success for a scratch
 copy with only executable/working-directory paths changed to the local build.
 The source template was not installed. A local extracted Ubuntu Caddy 2.6.2

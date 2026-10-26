@@ -5,6 +5,11 @@ This finite local diagnostic tests the message-boundary correction at
 an Internet benchmark, a performance ranking, or permission to deploy.
 The small-buffer experiment below was **rejected, not merged**.
 
+**Subsequent evidence:** the [coupled reference-admission/recovery correction](reference-admission-recovery.md)
+uses the reference RTO profile as well as bounded native admission. It passed
+new controlled comparisons and the affected safety matrix. This does not turn
+the small-buffer-only failure below into a pass or validate older packages.
+
 ## Fixed uninstrumented comparison
 
 A fresh run of the corrected raw C++ executable reproduced the severe-outage
@@ -111,9 +116,9 @@ this sanitized account is published. Normal application source is unchanged.
 These experiments operated on no public host, production service, Caddy route,
 release link, Rust source or rollback archive.
 
-Timely, truthful adverse-path result handling remains unresolved. Further work
-must account for native pending/in-flight data, cancellation and result
-admission without phantom send counts, relaxed density/deadline checks or a
-Rust-only semantic change. Corrected independent UI/generic-UI/agent bundles
-and current public role checks also remain required. Older public8/8 and
-benchmark artifacts retain their original pre-correction identities.
+At this diagnostic milestone, timely truthful result handling remained
+unresolved. The subsequent correction above addresses the recorded controlled
+case without phantom send counts, relaxed density/deadline checks or a Rust
+semantic change. New packages and public role checks of that newer source
+remain required. Older public8/8 and benchmark artifacts retain their original
+pre-correction identities.

@@ -266,6 +266,10 @@ RtcRuntime::RtcRuntime(bool enabled, unsigned workers) : enabled_(enabled) {
         // rather than libdatachannel's five-retry early-abort default. This
         // does not change per-message zero-retransmission probe reliability.
         rtc::SctpSettings settings;
+        settings.initialRetransmitTimeout = std::chrono::milliseconds(3000);
+        settings.minRetransmitTimeout = std::chrono::milliseconds(1000);
+        settings.maxRetransmitTimeout = std::chrono::milliseconds(60000);
+        settings.sendBufferSize = 65536;
         settings.maxRetransmitAttempts = std::numeric_limits<std::uint16_t>::max();
         rtc::SetSctpSettings(settings);
         rtc::Preload();
