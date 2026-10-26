@@ -1,0 +1,23 @@
+--- a/usrsctplib/netinet/sctputil.c
++++ b/usrsctplib/netinet/sctputil.c
+@@ -6696,6 +6696,11 @@
+ 				goto release;
+ 			}
+ 
++			/* uiomove runs without the read-queue lock. Association teardown
++			 * can mark this queued control do_not_ref_stcb in the meantime.
++			 * Rejoin its lock domain before observing any control metadata. */
++			SCTP_INP_READ_LOCK(inp);
++			hold_rlock = 1;
+ 			if ((control->do_not_ref_stcb == 0) && stcb &&
+ 			    stcb->asoc.state & SCTP_STATE_ABOUT_TO_BE_FREED) {
+ 				no_rcv_needed = 1;
+@@ -6704,8 +6709,6 @@
+ 				/* error we are out of here */
+ 				goto release;
+ 			}
+-			SCTP_INP_READ_LOCK(inp);
+-			hold_rlock = 1;
+ 			if (cp_len == SCTP_BUF_LEN(m)) {
+ 				if ((SCTP_BUF_NEXT(m)== NULL) &&
+ 				    (control->end_added)) {

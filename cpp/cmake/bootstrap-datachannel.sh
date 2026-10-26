@@ -18,7 +18,7 @@ fi
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # Explicit, reviewed fixes found by fully instrumenting the pinned transport.
 # Never disable sanitizer checks to accommodate an upstream defect.
-for entry in 'self:libdatachannel-stored-callback-lock.patch' 'self:libdatachannel-openssl-close-notify.patch' 'libjuice:libjuice-picohash-callback-types.patch' 'usrsctp:usrsctp-linux-shared-state.patch'; do
+for entry in 'self:libdatachannel-stored-callback-lock.patch' 'self:libdatachannel-openssl-close-notify.patch' 'libjuice:libjuice-picohash-callback-types.patch' 'usrsctp:usrsctp-linux-shared-state.patch' 'usrsctp:usrsctp-mbuf-refcount.patch' 'usrsctp:usrsctp-receive-queue-lock.patch'; do
   dependency=${entry%%:*}
   patch="$script_dir/patches/${entry#*:}"
   if [[ "$dependency" == self ]]; then

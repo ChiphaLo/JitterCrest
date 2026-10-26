@@ -120,6 +120,11 @@ the resource suite does not replace them. Original failures remain preserved.
 
 ## Verified final-source results — 2026-10-26
 
+**Snapshot scope:** the table below predates the subsequent configured-node,
+association-retry and native mbuf/receive-queue changes. New TSan runs exposed
+real dependency races; see `transport-compatibility.md`. Those failures are
+retained and this historical table is not current-source safety approval.
+
 The final exported native sources were reproduced from upstream plus the
 published patches, rebuilt, then tested again. The earlier investigation binary
 snapshots were not silently relabeled as this final-source run. Application/test

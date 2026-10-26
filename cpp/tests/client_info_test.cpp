@@ -13,8 +13,9 @@ void require(bool value) {
     if (!value)
         throw std::runtime_error("client-info fixture mismatch");
 }
-speedtest::Json lookup(const std::shared_ptr<speedtest::ClientInfo> &info, std::string ip) {
-    boost::asio::io_context io;
+speedtest::Json lookup(boost::asio::io_context &io,
+                       const std::shared_ptr<speedtest::ClientInfo> &info, std::string ip) {
+    io.restart();
     auto future = boost::asio::co_spawn(io, info->lookup(std::move(ip)), boost::asio::use_future);
     io.run();
     return future.get();
@@ -24,6 +25,9 @@ int main() {
     using namespace speedtest;
     try {
         const CurlRuntime runtime;
+        // Providers may still be returning from their completion post after
+        // io.run() returns. Keep the context alive until every producer joins.
+        boost::asio::io_context lookup_io;
         require(url_origin("https://EXAMPLE.invalid:443/path?q=1") == "https://example.invalid");
         require(url_origin("http://example.invalid:8080/a") == "http://example.invalid:8080");
         require(url_origin("http://[2001:0db8:0000::1]:80/") == "http://[2001:db8::1]");
@@ -42,10 +46,10 @@ int main() {
                         {"connection",
                          {{"asn", "as 1234 rest"}, {"org", "Provider"}, {"isp", " ISP \t One "}}}};
         });
-        const auto a = lookup(primary, "192.0.2.1");
+        const auto a = lookup(lookup_io, primary, "192.0.2.1");
         require(a["asn"] == "AS1234" && a["asName"] == "Provider" && a["isp"] == "ISP One" &&
                 a["country"] == "United States" && a["countryCode"] == "US" && a["ok"] == true);
-        require(lookup(primary, "192.0.2.1") == a && calls == 1);
+        require(lookup(lookup_io, primary, "192.0.2.1") == a && calls == 1);
         primary->shutdown();
         primary->join();
         auto fallback = std::make_shared<ClientInfo>([](const std::string &url, long timeout) {
@@ -56,13 +60,13 @@ int main() {
             require(timeout == 2500 && url.find("ipinfo.io/") != std::string::npos);
             return Json{{"org", "as7890  Fallback  Org "}};
         });
-        const auto b = lookup(fallback, "192.0.2.2");
+        const auto b = lookup(lookup_io, fallback, "192.0.2.2");
         require(b["asn"] == "AS1234" && b["asName"] == "Fallback Org" && b["isp"] == "ISP One");
         fallback->shutdown();
         fallback->join();
         auto missing =
             std::make_shared<ClientInfo>([](const std::string &, long) { return Json(nullptr); });
-        require(lookup(missing, "192.0.2.3")["ok"] == false);
+        require(lookup(lookup_io, missing, "192.0.2.3")["ok"] == false);
         missing->shutdown();
         missing->join();
         std::mutex mutex;
@@ -103,7 +107,7 @@ int main() {
         require(admitted && peak == 4 && failed == 4);
         bounded->shutdown();
         bounded->join();
-        require(lookup(bounded, "192.0.2.99")["ok"] == false);
+        require(lookup(lookup_io, bounded, "192.0.2.99")["ok"] == false);
         std::cout << "client-info normalization, cache, bounded workers and shutdown passed\n";
         return 0;
     } catch (const std::exception &error) {

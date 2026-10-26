@@ -1291,7 +1291,13 @@ struct HttpServer::Impl : std::enable_shared_from_this<HttpServer::Impl> {
 };
 HttpServer::HttpServer(asio::io_context &io, Config cfg, std::function<void()> stopped)
     : impl_(std::make_shared<Impl>(io, std::move(cfg), std::move(stopped))) {}
-HttpServer::~HttpServer() = default;
+HttpServer::~HttpServer() {
+    // Completion execution can overtake the producer's return from post().
+    // Keep App/ClientInfo and the caller-owned io_context alive until every
+    // provider has left that executor, including normal and startup teardown.
+    impl_->app->info->shutdown();
+    impl_->app->info->join();
+}
 void HttpServer::start() {
     const auto impl = impl_;
     asio::co_spawn(impl->acceptor.get_executor(), impl->accept(),

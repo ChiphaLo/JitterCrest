@@ -105,6 +105,28 @@ int main(int argc, char **argv) {
         }
         if (!rejected)
             throw std::runtime_error("invalid configuration accepted");
+        const speedtest::Json nodes = speedtest::Json::array(
+            {speedtest::Json{{"id", "fixture"}}, speedtest::Json{{"id", "regional-probe"}},
+             speedtest::Json{{"id", "probe-only"}}, nullptr, 7});
+        const auto custom = [&](std::string value, bool custom_id) {
+            return speedtest::Config::from_environment(
+                [&](std::string_view name) -> std::optional<std::string> {
+                    if (name == "SPEEDTEST_NODES")
+                        return nodes.dump();
+                    if (name == "ENABLE_PROBE_ONLY_NODE")
+                        return value;
+                    if (name == "SPEEDTEST_PROBE_ONLY_NODE_ID" && custom_id)
+                        return "regional-probe";
+                    return std::nullopt;
+                });
+        };
+        if (custom("0", true).nodes != speedtest::Json::array({nodes[0], nodes[2], nullptr, 7}))
+            throw std::runtime_error("custom probe visibility mismatch");
+        if (custom("0", false).nodes != speedtest::Json::array({nodes[0], nodes[1], nullptr, 7}))
+            throw std::runtime_error("default probe visibility mismatch");
+        for (const auto *value : {"", "1", "false", "00", " 0", "0 "})
+            if (custom(value, true).nodes != nodes)
+                throw std::runtime_error("nonzero probe enable flag changed nodes");
         std::cout << "configuration self-test passed\n";
         return 0;
     } catch (const std::exception &e) {

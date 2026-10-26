@@ -24,6 +24,8 @@ class ClientInfo : public std::enable_shared_from_this<ClientInfo> {
         stopping_ = true;
     }
     void join() {
+        // The executor context must outlive all producer calls, not merely
+        // its last completion handler. Join before destroying that context.
         pool_.join();
     }
 

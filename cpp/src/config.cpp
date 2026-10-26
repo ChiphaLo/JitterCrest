@@ -144,16 +144,16 @@ Config Config::from_environment(const Environment &get) {
     }
     if (nodes.is_array() && !nodes.empty())
         cfg.nodes = std::move(nodes);
+    cfg.probe_only_id = get("SPEEDTEST_PROBE_ONLY_NODE_ID").value_or("probe-only");
     if (get("ENABLE_PROBE_ONLY_NODE") == "0")
         cfg.nodes.erase(std::remove_if(cfg.nodes.begin(), cfg.nodes.end(),
-                                       [](const Json &node) {
+                                       [&cfg](const Json &node) {
                                            return node.is_object() && node.contains("id") &&
-                                                  node["id"] == "probe-only";
+                                                  node["id"] == cfg.probe_only_id;
                                        }),
                         cfg.nodes.end());
     cfg.probe_only = get("SPEEDTEST_PROBE_ONLY") == "1";
     cfg.csp_compat_origins = get("SPEEDTEST_CSP_COMPAT_ORIGINS").value_or("");
-    cfg.probe_only_id = get("SPEEDTEST_PROBE_ONLY_NODE_ID").value_or("probe-only");
     cfg.probe_only_host = get("SPEEDTEST_PROBE_ONLY_HOST").value_or("");
     cfg.max_upload = numeric(get, {.name = "MAX_UPLOAD",
                                    .fallback = 64ULL << 20ULL,

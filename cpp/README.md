@@ -47,6 +47,12 @@ before last-owner teardown; it does not weaken the browser closure deadline or
 modify the Rust/reference protocol. Resource, repeated-close and wire suites
 remain distinct acceptance checks.
 
+The current configured-node visibility and SCTP retry-budget changes, newly
+reproduced native mbuf/receive-queue races, and bounded test-failure watchdog are
+described in `docs/transport-compatibility.md`. Repaired-source safety validation
+and public deployment-profile acceptance remain required; older green snapshots
+must not be interpreted as approval of a later dependency build.
+
 Independent binary/runtime bundling and deterministic archives are described in
 `docs/release-bundle.md`. Packaging never installs a service or authorizes a
 production switch; relocation and target-host tests remain required.

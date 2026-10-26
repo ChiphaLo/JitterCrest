@@ -17,6 +17,7 @@
 #include <cstring>
 #include <deque>
 #include <ifaddrs.h>
+#include <limits>
 #include <map>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -260,6 +261,13 @@ RtcRuntime::RtcRuntime(bool enabled, unsigned workers) : enabled_(enabled) {
     if (enabled_) {
         rtc::InitLogger(rtc::LogLevel::None);
         rtc::SetThreadPoolSize(std::max(1U, workers));
+        // The reference T3 DATA timer does not abort on a retry count. Keep
+        // the association alive within our bounded peer/session lifetime,
+        // rather than libdatachannel's five-retry early-abort default. This
+        // does not change per-message zero-retransmission probe reliability.
+        rtc::SctpSettings settings;
+        settings.maxRetransmitAttempts = std::numeric_limits<std::uint16_t>::max();
+        rtc::SetSctpSettings(settings);
         rtc::Preload();
     }
 }
