@@ -1,113 +1,103 @@
-# Objective acceptance audit — incomplete
+# C++20 objective acceptance — completed with explicit limits
 
-This maps the original C++20 migration objective to finite evidence and remaining
-work. It is **not** a declaration that every requirement is complete. Rust source,
-frontend, historical archives, production services/routes and rollback material
-remain protected. A source commit or a passing subset does not authorize cutover.
+Runtime source: `019ff35821f974d80ab223e0fed4f19f7b01a6fb`.
+This is the final development/deliverable audit, not a universal equivalence or
+zero-risk certification. It supersedes earlier incomplete status summaries;
+historical reports retain their dates, artifact identities and failed runs.
+The subsequent user-authorized merge/deployment is a separate operational gate.
 
-## Requirement map
+## Original fifteen-section requirement map
 
-| Objective section | Implemented / inspected evidence | Acceptance boundary |
+| Section | Delivered evidence | Scope / limitation |
 |---|---|---|
-| 1 — independent equivalent backend | Independent C++ core, Beast HTTP and libdatachannel native transport; separate UI/agent CMake outputs and actual processes | No Rust binary/FFI/service implements a C++ route. Universal adverse-path equivalence is not established |
-| 2 — C++20 and engineering rules | CMake C++20, RAII connection/limit/progress ownership, serialized executors, bounded provider pool, explicit dependency patches; README lists applied Core Guidelines | Finite static/runtime evidence is not proof of absence of every UB/race |
-| 3 — authoritative Rust baseline | Current Rust HTTP/WebRTC/configuration implementation is the paired reference; documented HTTP cadence, zero-retry probes, percentile and Node-era documentation differences | Historical Node archives are retained, not the implementation reference |
-| 4 — HTTP/API/wire/statistics | 126 paired HTTP contracts including10KiB/100KiB/1MiB, streaming/progress/status/headers/CORS;128-byte native frames;20pps×2s and100pps×20s; core3065 differential vectors and configuration521 | Native message negotiation/read-boundary defects were newly corrected. New bundles/public checks must carry that source, not old artifacts |
-| 4 — client-computed metrics | Actual-served helper arithmetic510 vectors: percentiles, scaled MAD, adjacent-difference mean, population standard deviation, strict timing thresholds and trimmed stable throughput | Shared unchanged frontend, not invented C++/Rust server calculations or a mocked RTC pass. Numeric tolerance is1e-12 relative/absolute |
-| 5 — framework/module design | README documents Beast incremental I/O/lifetimes, native WebRTC selection, pure protocol/statistics separation and mature dependencies | No speculative custom allocator/assembly/SIMD or claim that C++ must be faster |
-| 6 — I/O/concurrency/resources | HTTP/lifecycle/resource contracts; native admission/expiry/FIFO/control/byte limits; close/replacement/shutdown; bounded sends; source-backed reference-scale RTC admission/recovery correction | Coupled settings pass finite recovery/safety and a new current-source native-Windows public8/8 profile. No universal network equivalence claim |
-| 7 — timing/performance design | Monotonic scheduler/executor samples, exact sequence/ACK identity, real partial-reliability loss tests, measured throughput/CPU/RSS | Do not treat enqueue acceptance as proof of wire delivery; no timeout or density gate was relaxed |
-| 8 — preserve Rust | Protected-source/vendor/frontend manifests; independent VPS before/after process, binary, unit, Caddy and release snapshots | No production switch or main merge has occurred |
-| 9 — shared compatibility clients | Shared deterministic core/HTTP/native browser clients; invalid/truncated/duplicate/reordered/half-close/cancellation/resource scenarios; original failures retained | Shared post-result late-ACK limitation and adverse-path failures are documented, not silently repaired in Rust |
-| 10 — fair benchmarks | Five alternating core rounds, three HTTP rounds, per-backend300s mixed load and actual1/16/64/128 connections; separate36-case Internet experiment with independent remote CPU/RSS | Reports identify pre-message-cap `cd514ed` artifacts. They are not measurements of later executables or statistical proof of language superiority |
-| 11 — builds/toolchain | Debug/Release/separate ASan+UBSan/TSan presets, pinned native bootstrap, standalone source builds and relocation archives, clang-format/tidy configuration | Linux x86_64 verified. Linux aarch64 is not claimed built/run; conditional hardware/toolchain coverage remains explicit |
-| 12 — safety | Separate sanitizer runtime suites, actual native mbuf regression,20,000 finite core fuzz runs; reduced coroutine fixture and negative controls | Full raw HTTP Tidy still has two audited Clang18/Boost model findings; it is not a clean full-service result. System OpenSSL/libcurl are not claimed fully source-instrumented |
-| 13 — deployment | Separate systemd/Caddy/env templates; UI/agent/generic roles; new source019ff packages/relocation/native recovery; current public4-combination8/8 and protected copy-budget/cleanup checks | Old boundary/fairness artifacts retain their scopes. Production cutover has not occurred; preserve Rust rollback and unrelated services |
-| 14 — actual implementation flow | Sources, real builds, tests, comparison, sanitizers, benchmark data and technical reports exist rather than a demo/design-only handoff | Finishing documentation must not replace resolving or explicitly auditing remaining objective gates |
-| 15 — delivery/final decision | README and linked architecture/build/compatibility/safety/resource/performance/deployment reports; generic public source and test clients | Final overall acceptance and conditional merge/production deployment are **not yet achieved** |
+| 1 Independent backend | Complete C++20 executable: pure core, Beast HTTP/streaming/progress, native libdatachannel ICE/DTLS/SCTP, UI and no-UI agents | No Rust binary, Rust FFI or Rust service in runtime; test-only oracle is separate |
+| 2 Modern C++ quality | RAII leases/resources, typed views with owning awaited buffers, serialized executors, bounded worker pool, exception boundaries; applied Core Guidelines in README | Finite review/static/runtime evidence, not proof that all bugs are impossible |
+| 3 Rust baseline | Rust routes/config/protocol/statistics/runtime/deployment inspected; current Rust is the paired reference | Node archive is retained historical data, not authority; private deployment aliases stay private |
+| 4 HTTP/wire/statistics | HTTP126 paired cases;10KiB/100KiB/1MiB; progress/CORS/cache/status/limits;128B little-endian probes;20pps×2s and100pps×20s; core3065/config521/served-frontend510 vectors | Discrete values exact, floating1e-12 absolute/relative; random fragment identifiers normalized only. Client-side metrics remain client-side |
+| 5 Architecture | Mature Beast/Asio, OpenSSL, libcurl, JSON and pinned patched libdatachannel; pure protocol/statistics separated from network ownership | No speculative allocators, SIMD, lock-free structures or Rust wrapper |
+| 6 Concurrency/resources | Partial I/O, backpressure, half-close/reset/slow client/deadline/drain/cancellation; bounded peers, queues, bytes, rates, buffers, provider jobs | Resource13, wire22, repeated-close100 and shutdown3 suites per affected release/sanitizer profile; configured capacity is not maximum performance capacity |
+| 7 Timing/performance design | Monotonic planned/actual/receive accounting; measured CPU cost per completed work; source-backed native admission/RTO correction | Enqueue is not wire delivery; original25s result window and.99 completeness gate preserved |
+| 8 Rust preservation |86 protected source/frontend/vendor baseline files checked unchanged; historical archives/backups preserved; independent bundles/services | Development and acceptance left production unchanged. A later explicitly authorized cutover must retain Rust rollback |
+| 9 Shared compatibility | Deterministic paired clients for frames, JSON/base64/SDP, HTTP, resources, actual browser transport/roles, invalid/truncated/duplicate/reordered and close/recovery cases | Final current-source public four combinations/eight node cases passed; earlier transport-path failures remain recorded rather than erased |
+| 10 Fair benchmarks | Five core rounds; three HTTP rounds/168 rows/15,292,678 requests;300s mixed load per backend/2,305,566 requests; real observed1/16/64/128 connections; separate36-case/5,914-request Internet profile | Matched Release/ThinLTO, hardware/OS/client/payload/warmup/concurrency; zero workload errors. WAN/client/WSL noise and finite durations remain explicit |
+| 11 Build/toolchain | CMake, pinned native bootstrap/patches, Debug/Release, independent ASan+UBSan/TSan presets, format/tidy configs; three independent relocated packages | Linux x86_64 validated. aarch64 was conditional and is not claimed built/run; bundles require glibc>=2.38 |
+| 12 Safety checks | Four-profile CTest8; ASan+UBSan and TSan affected runtime matrices, real native-race negative controls and repairs;20,000 finite core fuzz runs; full static analysis executed | Full raw HTTP Tidy is NOT clean: two Clang18/Boost coroutine-model findings have exact repro/CFG/negative-control evidence, no suppression. System OpenSSL/libcurl not wholly source-instrumented |
+| 13 Independent deployment | Separate binary/workdir/port/unit/log/release templates, bundled libraries/licenses/manifests; actual isolated three-host IP-HTTPS/UDP checks, staged backout, complete storage budget and cleanup | UI/generic-UI/agent each CTest8 plus relocation/message/recovery; no live config/secret/ops scripts in public repository |
+| 14 Actual execution | Implemented, compiled, tested, compared, sanitized, benchmarked and documented; regressions repaired with retained before/after evidence | No test deletion, weakened metric or relaxed deadline to manufacture acceptance |
+| 15 Final deliverables | Complete server, shared tests, safety reports, actual performance tables, architecture/build/ownership/deployment documentation and eight explicit answers below | Deliverables accepted for the documented finite profiles, not universal network identity or a language-superiority claim |
 
-## Versioned verification, not a merged green table
+## Current-source safety and release gate
 
-- The receive-fairness snapshot passed its current-source Release and separate
-  sanitizer resource/wire/close/shutdown matrix. Its native-Windows public profile
-  passed eight node cases and four mixed backend combinations. Those hashes are
-  preserved and do not identify a later correction.
-- The native message-cap correction passed its own four-profile builds/CTest8
-  and paired negotiation. Its Release/ASan+UBSan/TSan resource13, close100, wire22
-  and shutdown3 results precede the additional native read-boundary guard.
-- The final read-boundary guard then rebuilt all four profiles and passed CTest8
-  plus paired real65535/65536/65537-byte boundary,20pps×2s, close and409 checks.
-  `transport-compatibility.md` distinguishes these scopes and retained failures.
-  It is not claimed that the earlier full matrix was rerun after the last guard.
-- The last official-bundle severe-loss diagnostic still returned the C++ result
-  at about30.1s for a20s test, beyond the unchanged frontend25s result window;
-  Rust returned an incomplete result at about23.9s. The C++ native message-cap
-  correction is separate and **does not prove that recovery issue fixed**.
-  The corrected raw executable has now reproduced that delay independently.
-  A fixed15-case comparison rejected a private64KiB send-buffer experiment:
-  it matched Rust's failure reasons but still arrived at30.81s in both severe
-  rounds, versus23.87s for Rust. A separate four-case metadata check verified
-  the actual socket settings and native result-admission timing. No setting
-  was promoted and neither diagnostic is frontend acceptance. See
-  [queue diagnostic](send-queue-diagnostic.md).
-- The last clean Internet HTTP collection had36 cases /5,466 requests and zero
-  workload errors. A complete earlier collection overlapping a short frontend
-  test is retained but excluded from formal timing. All temporary units/secrets
-  were removed and independent production checks matched on all three hosts.
-- Subsequent corrected public-source UI/generic-UI/agent ThinLTO builds each
-  passed CTest8 and archive relocation/checksums/actual-library mapping, fixed
-  upload/download/progress and paired native boundary checks. The two normal
-  webpages also passed autoRTT and a fresh-offer-correlated Restart. These are
-  new local artifact results, not a corrected public8/8 profile or a new
-  sanitizer/performance matrix. See [candidate builds](corrected-candidate-builds.md).
-- A subsequent source-backed reference-RTO plus bounded-native-admission
-  correction passed fixed20-case comparison, eight further AB/BA loss cases,
-  native settings readback and a genuine old-executable negative control.
-  It rebuilt all four profiles with CTest8/config521/visibility16/paired native
-  boundaries each. Release/ASan+UBSan/TSan additionally passed HTTP126,
-  resource13, untraced close100, wire22, shutdown3 and respectively8/4/4 new
-  paired recovery cases. This is new evidence including the final read guard,
-  not a relabeling of the earlier guard-only scope. Scoped RTC Tidy passed;
-  full-HTTP model findings remain audited/nonzero. See
-  [reference admission/recovery](reference-admission-recovery.md).
-- Complete staging-copy accounting now includes archive, extraction, reference,
-  proxy and metadata **in addition to** the768MiB reserve. Windows/Linux unit8
-  and an actual read-only live rejection passed without remote mutation.
-- Current source019ff was subsequently rebuilt into three independent packages.
-  Each passed relocated native message/recovery checks; both normal UI roles
-  passed fresh-offer Restart. A new native-Windows public profile passed all8
-  node cases/four mixed backend combinations and20 exact denial proofs, with
-  fresh Restart session and direction test IDs. Complete copy budgets, actual
-  remote executable/library identities, retained reserve and independent
-  post-cleanup production snapshots passed. See
-  [current release validation](recovery-release-validation.md). The versioned
-  performance/final objective audit remains pending, not production cutover.
+All four current-source profiles passed CTest8, config521, visibility16 and
+paired native message boundaries. Release/ASan+UBSan/TSan additionally passed
+HTTP126, resource13, untraced close100, wire22, shutdown3 and respectively8/4/4
+paired recovery cases. Core/parser code was unchanged from its3065-vector and
+20,000-run fuzz validation; that scope is not expanded to arbitrary network code.
 
-## Answers supported by the measured scope
+The recovery regression now returns truthful incomplete reasons within the
+unchanged frontend window under the declared6–20s blackout. The genuine older
+executable fails that test. See [recovery correction](reference-admission-recovery.md).
+The independent three role packages and fresh current-source Windows-browser
+public8/8 profile, fresh Restart IDs and20 exact probe denials are documented in
+[release validation](recovery-release-validation.md). Final local/WAN timing was
+collected serially after those validations; all relevant inputs remained frozen.
 
-1. **Equivalent?** Normal/offline/HTTP and recorded native role profiles have
-   substantial paired evidence. Do not claim complete adverse-path equivalence
-   or apply an older package's success to newer source.
-2. **Throughput?** Rust led all twelve local download cases and eleven of twelve
-   upload cases in the pinned revalidation.
-3. **CPU?** Rust had lower bulk-transfer CPU cost per GiB; C++ had lower cost per
-   lightweight latency request in the tested cases. Saturation CPU percent alone
-   is not efficiency.
-4. **Memory?** Rust used less idle memory; C++ used less large-payload,
-   high-concurrency peak RSS, at lower completed throughput.
-5. **High-concurrency latency?** Mixed results. C++ had lower lightweight-request
-   P99, but not uniformly lower payload or mixed-load tails.
-6. **Significance?** Finite descriptive ranges, no population-level significance
-   or universal language ranking. Internet results include WAN/client/proxy.
-7. **Safety/maintenance cost?** C++ adds real native-library patching, callback,
-   lifetime and sanitizer obligations; the diagnosed races are not concealed.
-8. **Reason to replace Rust?** Current results do not justify replacement on
-   overall throughput, CPU efficiency or lower maintenance cost. A user's
-   conditional deployment request still requires full objective acceptance.
+## Compatibility differences and retained limitations
 
-Read [transport compatibility](transport-compatibility.md),
-[public profiles](public-staging-validation.md),
-[current pinned local findings](current-performance-findings.md),
-[Internet revalidation](network-performance-fairness.md) and
-[coroutine analysis](coroutine-analysis.md) for exact evidence/limits. Raw
-operational diagnostics, credentials and deployment configurations stay private.
+- The native C++ and Rust stacks are not packet-identical. Native65536 negotiation,
+  the reference65535 read/close boundary, zero-retry128B probes, reference RTOs and
+  application deadlines are explicitly covered. C++ has per-channel64KiB admission
+  plus native65536 buffering, not an asserted byte-for-byte copy of Rust's shared
+  128KiB pending queue. Severe-loss finite outcomes/timely incomplete reasons
+  match the recorded reference profile; universal adverse-path equivalence is
+  not claimed.
+- Shared late-ACK/receipt-snapshot behavior is retained rather than modifying
+  Rust during migration. Earlier source-specific control stalls, sanitizer races
+  and close-alert failures remain versioned with their fixes/tests. Historical
+  Internet failures are not retrospectively converted to passes by a later run.
+- Public defaults/configuration are generic; deployment-specific probe IDs,
+  host aliases and CSP origins require explicit operational mapping. No real
+  infrastructure values are embedded in this public edition.
+- The two unsuppressed full-HTTP static-analysis diagnostics remain visible and
+  triaged as scoped analyzer coroutine-model false positives, not ignored
+  lifetime defects. See [analysis evidence](coroutine-analysis.md). No current
+  untriaged implementation/sanitizer failure is represented as a pass.
+- Five-minute local stability, short Internet HTTP samples and finite browser
+  profiles do not establish multi-day uptime, exhaustive third-party provider
+  compatibility, aarch64 support or absence of every race/UB.
+
+## Required final answers
+
+1. **Functionally equivalent?** Compatible in the tested HTTP/API/wire/statistical,
+   resource and real-browser profiles, including mixed Rust/C++ nodes; not a claim
+   of identical native transport behavior under every possible network condition.
+2. **Higher throughput?** Rust led all12 local download and all12 upload median
+   cases. For1MiB/c64: Rust40.892/36.223Gbit/s versus C++31.029/26.360 download/upload.
+3. **Lower CPU?** Rust had lower bulk CPU-seconds/GiB; C++ lower cost for bodyless
+   latency requests. Saturation CPU percentages alone are not efficiency.
+4. **Lower memory?** Rust lower idle RSS; C++ lower large-payload high-load peak
+   RSS, at lower completed throughput. See complete matched resource tables.
+5. **More stable high-concurrency latency?** Mixed. C++ c128 bodyless P99 was
+   3.403ms versus Rust6.047ms; upload/mixed tails were worse. No open-loop SLO claim.
+6. **Significant difference?** Descriptive finite ranges only, no population-level
+   significance test or universal language score. WAN samples include link/client/TLS/proxy effects.
+7. **Additional complexity?** Yes: native dependency patches, callback/lifetime
+   ownership, sanitizer rebuilds and upstream maintenance are real C++ costs.
+8. **Reason to replace Rust?** Not for overall throughput, CPU efficiency or lower
+   maintenance based on these measurements. An authorized operational deployment
+   is separate from performance recommendation; retain Rust source and rollback.
+
+## Reports
+
+- [Architecture, dependencies, builds and ownership](../README.md)
+- [Current complete local tables](local-performance-recovery.md)
+- [Current interpretation](performance-findings-recovery.md)
+- [Current real-network tables](network-performance-recovery.md)
+- [Current safety/recovery matrix](reference-admission-recovery.md)
+- [Current independent packages/public roles](recovery-release-validation.md)
+- [Static-analysis classification](coroutine-analysis.md)
+- [Historical transport diagnoses and boundaries](transport-compatibility.md)
+
+Raw logs, hosts, credentials, recovery archives and private operational scripts
+remain outside the public source repository. Production merge/cutover status is
+recorded separately, never inferred from a development acceptance table.

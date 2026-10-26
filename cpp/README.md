@@ -1,81 +1,42 @@
-# Independent C++20 backend — acceptance in progress
+# Independent C++20 Speedtest backend
 
-**The independent HTTP/WebRTC implementation is present, but final compatibility
-and release acceptance are incomplete. It must not replace the Rust production
-service yet.** The full target includes HTTP streaming, upload progress,
-WebRTC probes/control, cancellation/accounting, safety checks, shared-client
-integration tests and measured Rust/C++ benchmarks. A green core test is not a
-claim that those end-to-end requirements are complete.
+Complete independent C++20 HTTP/WebRTC backend alongside the preserved Rust
+implementation. Runtime never invokes Rust, Node or Python; Rust is used only as
+the development compatibility oracle. UI and no-UI agents compile separately.
 
-The native HTTP milestone is implemented: `speedtest-cpp` now listens on a
-separate port, serves UI or measurement-only builds, and independently handles
-download/upload streaming, upload progress, limits, client info and connection
-lifecycle. Native WebRTC is now implemented behind the default-off experimental
-flag: native signaling/ICE/DTLS/SCTP, cancellation/tombstones, separate reliable
-control and zero-retry probes, scheduler/accounting and fragmented results.
-**Complete safety and acceptance gates remain pending.** With the flag off,
-valid RTC requests still fail closed with 503. Do not enable this binary
-as a production backend. See `docs/rtc-validation.md` for current RTC evidence,
-`docs/http-validation.md` for the earlier HTTP snapshot,
-and outstanding safety gates; `docs/core-validation.md` is the earlier core
-snapshot, not an all-current-source safety claim.
+The [final objective audit](docs/acceptance-audit.md) maps all15 original sections
+to delivered evidence and explicit limits. Current runtime source is `019ff35`.
+Finite HTTP/statistics/resource/browser compatibility and release safety gates
+passed; this is not a universal equivalence or zero-bug certification.
 
-The requirement-by-requirement status and remaining gates are in
-`docs/acceptance-audit.md`; it explicitly does not declare the full goal complete.
+## Current results
 
-Release/ThinLTO measurements of the receive-fairness snapshot are available in
-`docs/local-performance-current.md`, with interpretation in
-`docs/current-performance-findings.md`. The original frozen measurements remain
-in `docs/local-performance.md` and `docs/performance-analysis.md`.
-The distinct same-snapshot Internet revalidation is in
-`docs/network-performance-fairness.md`. All reports pin their measured artifacts;
-they must not be relabeled as a later corrected binary.
-Reproducible commands are in `benchmarks/README.md`. Both runs cover five native-core
-rounds, three HTTP rounds and five minutes of mixed traffic per backend. Rust
-leads most measured payload throughput cases; C++ has some lightweight-request
-and high-concurrency RSS advantages. These are local results, not Internet
-measurements or evidence authorizing a production replacement.
+- Debug/Release/ASan+UBSan/TSan: CTest8, config521, paired visibility and native
+  message boundaries. Affected release/sanitizer matrices include HTTP126,
+  resources13, close100, wire22, shutdown3 and recovery checks.
+- Independent preserved-UI/generic-UI/agent bundles, actual library relocation,
+  fresh Restart, public four-backend-combination/eight-case profile and probe
+  payload denials: [current release validation](docs/recovery-release-validation.md).
+- Two unsuppressed full-HTTP Clang18/Boost analyzer-model findings are explicitly
+  audited, not called a clean full-service Tidy pass:
+  [coroutine analysis](docs/coroutine-analysis.md).
+- Latest fair Release/ThinLTO results: [local tables](docs/local-performance-recovery.md),
+  [Internet tables](docs/network-performance-recovery.md),
+  [interpretation](docs/performance-findings-recovery.md). Rust leads local bulk
+  throughput/CPU efficiency; C++ has selective lightweight-request/high-load-RSS
+  advantages. No overall performance/maintenance justification to replace Rust.
 
-The central-UI/independent-agent HTTPS IP and finite resource-exhaustion matrix
-is documented in `docs/agent-resource-validation.md`. All four Rust/C++ UI/agent
-combinations passed in Release, ASan/UBSan and TSan profiles. Subsequent guarded
-VPS tests demonstrated actual public-NAT probe-only connectivity and independent
-runtime portability, but also retained unresolved real-network transport
-failures; see `docs/public-staging-validation.md`. Full acceptance remains open.
+RTC remains default-off behind `SPEEDTEST_RUST_RTC_EXPERIMENTAL=1` for explicit
+operational enablement; without it, valid RTC requests fail closed503. Do not
+infer permission to replace an existing service from source availability.
+Independent deployment templates and storage admission are in
+[staging](docs/staging.md). Subsequent user-authorized production status and
+Rust rollback must be verified separately.
 
-The two remaining Clang18/Boost coroutine diagnostics now have an exact reduced
-fixture, AST/CFG evidence, known-bad controls and a four-profile runtime lifetime
-test; see `docs/coroutine-analysis.md`. The raw full-service Tidy command still
-reports those two findings and is **not** mislabeled a clean pass. No checker or
-warning was suppressed to obtain this classification.
-
-The additional native admission/expiry/FIFO/resource suite and the diagnosed
-OpenSSL DTLS close-notify lifetime regression are documented in
-`docs/rtc-resource-validation.md`. The dependency patch sends the close alert
-before last-owner teardown; it does not weaken the browser closure deadline or
-modify the Rust/reference protocol. Resource, repeated-close and wire suites
-remain distinct acceptance checks.
-
-The current configured-node visibility and SCTP retry-budget changes, newly
-reproduced native mbuf/receive-queue races, and bounded test-failure watchdog are
-described in `docs/transport-compatibility.md`. Repaired-source safety validation
-and public deployment-profile acceptance remain required; older green snapshots
-must not be interpreted as approval of a later dependency build.
-
-The subsequent bounded OpenSSL receive-turn follow-up is documented in
-`docs/receive-fairness.md`, including the unchanged flood requirements, retained
-failures and limits of the local transport diagnosis. Public release/production
-acceptance remains separate from that local safety revalidation.
-
-The subsequent native message-cap/read-boundary correction and its explicit
-before/after verification scopes are in `docs/transport-compatibility.md`.
-The older fairness bundles and their public eight-case result must not be
-relabeled as this corrected binary. The actual-served shared frontend arithmetic
-fixture is `tests/frontend_statistics_contract.py` (offline, not a mock RTC pass).
-
-Independent binary/runtime bundling and deterministic archives are described in
-`docs/release-bundle.md`. Packaging never installs a service or authorizes a
-production switch; relocation and target-host tests remain required.
+Earlier reports are historical snapshots; later passing evidence does not erase
+older failures or relabel their binaries. Start with the final audit/current
+reports above instead of treating an early milestone's pending checklist as
+current release status. Linux x86_64 was validated; aarch64 is not claimed.
 
 ## Architecture and boundaries
 
@@ -230,75 +191,9 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
   independent backends. Server pacing/RTT/accounting is independently implemented
   in C++; broader acceptance and benchmark work is still required.
 
-## Remaining acceptance work (not yet achieved)
 
-1. Include the remaining adverse-path/control observations in final acceptance
-   without relaxing protocol deadlines or the .99 scheduler-density gate.
-   The current native-Windows public central/multiple-agent profile passed all
-   eight node cases and four mixed Rust/C++ combinations, including probe-only
-   and data roles. This does not erase failures on the earlier Hong Kong-browser
-   path or the controlled severe-outage timing difference. See
-   [public staging](docs/public-staging-validation.md) for the exact positive
-   profile and retained failures, including dual-ended return-path evidence.
-   A newer unchanged-bundle header diagnostic established upstream record gaps
-   between the browser-host egress and probe-host ingress for both backends,
-   while only two of eight pages completed. It also closed the failed-page
-   payload-denial evidence gap. See the same report for the limits of that
-   attribution, and `docs/transport-compatibility.md` for the separately
-   reproduced shared late-ACK/receipt-snapshot limitation. Neither observation
-   is a full acceptance pass or permission to change the Rust baseline.
-2. Existing local HTTP/resource, native RTC wire/loss/resource/close/shutdown,
-   Debug/Release and separate ASan+UBSan/TSan matrices are recorded in the linked
-   validation reports; they do not prove every Internet transport condition.
-   The two raw full-service Clang analyzer findings remain nonzero, with scoped
-   model-false-positive evidence in [coroutine analysis](docs/coroutine-analysis.md),
-   not a falsely clean Tidy claim. External providers used deterministic fixtures,
-   not a claim of validation against every third-party response.
-3. Shared Rust/C++ offline and HTTP/browser contracts include independently
-   configured UI, no-UI agents, and probe-only roles. Complete final production
-   profile acceptance and the original requirement-by-requirement audit rather
-   than treating these finite suites as full goal completion.
-4. Local multi-round Release/ThinLTO computation and HTTP benchmarks, CPU/RSS,
-   P50/P95/P99, accepted connections and five-minute stability are measured in
-   the reports above. A separate three-round, 36-case bounded Internet HTTP
-   comparison with remote CPU/RSS is now in
-   [network performance](docs/network-performance.md). Longer-running Internet
-   stability remains unmeasured; these short cases do not establish it.
-5. Independent systemd/Caddy templates are provided in `deploy/`, with their
-   isolation/rollback design in `docs/staging.md`. Reproducible UI/agent bundles,
-   relocation tests, temporary hardened VPS units and staged C++/Rust/C++ proxy
-   backout have been exercised. The preserved deployment frontend also passed
-   its separate build/HTTP/relocation checks. Final acceptance, conditional branch
-   merge and backed-up production deployment remain pending. No production route,
-   release link or service has been switched.
+## Validation history
 
-Current validation is a development milestone only. Full functionality,
-performance superiority and readiness to replace Rust remain unproven.
-
-The latest [post-boundary-fix queue diagnostic](docs/send-queue-diagnostic.md)
-retains a fixed15-case comparison and a separate actual-native metadata check.
-A private64KiB send-buffer-only experiment was rejected: its failure reasons
-matched Rust, but severe-outage result delivery still missed the original
-frontend deadline. Application source and production remain unchanged by it.
-
-New corrected public-source preserved-UI, generic-UI and no-UI-agent candidates
-have now passed their own [local build/relocation checks](docs/corrected-candidate-builds.md),
-including real paired message boundaries and fresh-offer-correlated normal UI
-Restart. Their public multi-host role acceptance and the adverse-path gate are
-still pending; no main merge or production cutover has occurred.
-
-The latest [reference-scale RTC admission/recovery correction](docs/reference-admission-recovery.md)
-combines reference RTO values with bounded native admission. Fixed comparisons,
-an old-executable negative control and new four-profile/affected sanitizer
-suites verify the recorded timely-incomplete-result regression without changing
-probe reliability, deadlines, counts or density gates. Earlier boundary-package
-hashes predate this change; new packages and public-role acceptance are pending.
-The [staging capacity guard](docs/staging.md#complete-temporary-copy-admission)
-also prevents spending the protected reserve on omitted temporary copies.
-
-New source019ff packages and their **new** native-Windows public4-combination /
-8-case profile have now passed, with fresh Restart IDs,20 exact probe denials,
-actual remote artifact/library identities, full copy budgets and independent
-post-cleanup production checks. See [current release validation](docs/recovery-release-validation.md).
-Current performance revalidation and the final objective audit remain pending;
-Rust production has not been switched and no main merge has occurred.
+Core, HTTP, native-resource, transport and static-analysis milestone reports
+remain in `docs/` with their original scopes. The [final audit](docs/acceptance-audit.md)
+identifies current-source evidence and retained limitations.
