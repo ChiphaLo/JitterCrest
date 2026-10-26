@@ -274,3 +274,9 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 
 Current validation is a development milestone only. Full functionality,
 performance superiority and readiness to replace Rust remain unproven.
+
+The latest [post-boundary-fix queue diagnostic](docs/send-queue-diagnostic.md)
+retains a fixed15-case comparison and a separate actual-native metadata check.
+A private64KiB send-buffer-only experiment was rejected: its failure reasons
+matched Rust, but severe-outage result delivery still missed the original
+frontend deadline. Application source and production remain unchanged by it.

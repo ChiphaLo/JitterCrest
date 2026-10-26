@@ -43,6 +43,13 @@ remain protected. A source commit or a passing subset does not authorize cutover
   at about30.1s for a20s test, beyond the unchanged frontend25s result window;
   Rust returned an incomplete result at about23.9s. The C++ native message-cap
   correction is separate and **does not prove that recovery issue fixed**.
+  The corrected raw executable has now reproduced that delay independently.
+  A fixed15-case comparison rejected a private64KiB send-buffer experiment:
+  it matched Rust's failure reasons but still arrived at30.81s in both severe
+  rounds, versus23.87s for Rust. A separate four-case metadata check verified
+  the actual socket settings and native result-admission timing. No setting
+  was promoted and neither diagnostic is frontend acceptance. See
+  [queue diagnostic](send-queue-diagnostic.md).
 - The last clean Internet HTTP collection had36 cases /5,466 requests and zero
   workload errors. A complete earlier collection overlapping a short frontend
   test is retained but excluded from formal timing. All temporary units/secrets

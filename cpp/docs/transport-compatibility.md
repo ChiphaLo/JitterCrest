@@ -288,3 +288,9 @@ still identified by their original hashes. They do not include this correction.
 New independent bundles/relocation and their deployment-profile checks are still
 required. The severe-outage/result-delay investigation is separate and is not
 claimed fixed by the message-cap correction.
+
+The [post-correction queue diagnostic](send-queue-diagnostic.md) now reproduces
+that delay on the corrected raw executable. A fixed 15-case comparison and a
+separate actual-socket metadata check reject a private 64 KiB send-buffer-only
+experiment: matching Rust's failure reasons did not make the result timely.
+No small-buffer setting was promoted into application source.
