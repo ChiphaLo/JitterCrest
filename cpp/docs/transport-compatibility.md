@@ -285,9 +285,11 @@ python3 cpp/tests/frontend_statistics_contract.py \
 
 The previous fairness bundles, public8/8 profile and performance measurements are
 still identified by their original hashes. They do not include this correction.
-New independent bundles/relocation and their deployment-profile checks are still
-required. The severe-outage/result-delay investigation is separate and is not
-claimed fixed by the message-cap correction.
+New independent corrected UI/generic-UI/agent bundles have now passed
+[local build/relocation/native/UI checks](corrected-candidate-builds.md).
+Their current public deployment-profile checks remain required. The
+severe-outage/result-delay investigation is separate and is not claimed fixed
+by the message-cap correction.
 
 The [post-correction queue diagnostic](send-queue-diagnostic.md) now reproduces
 that delay on the corrected raw executable. A fixed 15-case comparison and a

@@ -280,3 +280,9 @@ retains a fixed15-case comparison and a separate actual-native metadata check.
 A private64KiB send-buffer-only experiment was rejected: its failure reasons
 matched Rust, but severe-outage result delivery still missed the original
 frontend deadline. Application source and production remain unchanged by it.
+
+New corrected public-source preserved-UI, generic-UI and no-UI-agent candidates
+have now passed their own [local build/relocation checks](docs/corrected-candidate-builds.md),
+including real paired message boundaries and fresh-offer-correlated normal UI
+Restart. Their public multi-host role acceptance and the adverse-path gate are
+still pending; no main merge or production cutover has occurred.

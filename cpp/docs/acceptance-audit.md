@@ -22,7 +22,7 @@ remain protected. A source commit or a passing subset does not authorize cutover
 | 10 — fair benchmarks | Five alternating core rounds, three HTTP rounds, per-backend300s mixed load and actual1/16/64/128 connections; separate36-case Internet experiment with independent remote CPU/RSS | Reports identify pre-message-cap `cd514ed` artifacts. They are not measurements of later executables or statistical proof of language superiority |
 | 11 — builds/toolchain | Debug/Release/separate ASan+UBSan/TSan presets, pinned native bootstrap, standalone source builds and relocation archives, clang-format/tidy configuration | Linux x86_64 verified. Linux aarch64 is not claimed built/run; conditional hardware/toolchain coverage remains explicit |
 | 12 — safety | Separate sanitizer runtime suites, actual native mbuf regression,20,000 finite core fuzz runs; reduced coroutine fixture and negative controls | Full raw HTTP Tidy still has two audited Clang18/Boost model findings; it is not a clean full-service result. System OpenSSL/libcurl are not claimed fully source-instrumented |
-| 13 — deployment | Separate systemd/Caddy/env templates; UI/agent/generic roles; bundle manifests/licenses, source/patch identity and relocated runtime checks; guarded staging/backout | Corrected-message-boundary bundles and their current public role matrix remain pending. Preserve Rust rollback and unrelated services |
+| 13 — deployment | Separate systemd/Caddy/env templates; UI/agent/generic roles; bundle manifests/licenses, source/patch identity and relocated runtime checks; guarded staging/backout | Corrected independent bundles now pass local relocation/native/normal-UI checks. Their current public role matrix remains pending. Preserve Rust rollback and unrelated services |
 | 14 — actual implementation flow | Sources, real builds, tests, comparison, sanitizers, benchmark data and technical reports exist rather than a demo/design-only handoff | Finishing documentation must not replace resolving or explicitly auditing remaining objective gates |
 | 15 — delivery/final decision | README and linked architecture/build/compatibility/safety/resource/performance/deployment reports; generic public source and test clients | Final overall acceptance and conditional merge/production deployment are **not yet achieved** |
 
@@ -54,6 +54,12 @@ remain protected. A source commit or a passing subset does not authorize cutover
   workload errors. A complete earlier collection overlapping a short frontend
   test is retained but excluded from formal timing. All temporary units/secrets
   were removed and independent production checks matched on all three hosts.
+- Subsequent corrected public-source UI/generic-UI/agent ThinLTO builds each
+  passed CTest8 and archive relocation/checksums/actual-library mapping, fixed
+  upload/download/progress and paired native boundary checks. The two normal
+  webpages also passed autoRTT and a fresh-offer-correlated Restart. These are
+  new local artifact results, not a corrected public8/8 profile or a new
+  sanitizer/performance matrix. See [candidate builds](corrected-candidate-builds.md).
 
 ## Answers supported by the measured scope
 
