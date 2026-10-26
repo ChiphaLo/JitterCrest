@@ -4,7 +4,8 @@ Runtime source: `019ff35821f974d80ab223e0fed4f19f7b01a6fb`.
 This is the final development/deliverable audit, not a universal equivalence or
 zero-risk certification. It supersedes earlier incomplete status summaries;
 historical reports retain their dates, artifact identities and failed runs.
-The subsequent user-authorized merge/deployment is a separate operational gate.
+The subsequent user-authorized merge/deployment passed its separate operational
+gate; see [production rollout](production-rollout.md).
 
 ## Original fifteen-section requirement map
 

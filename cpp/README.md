@@ -30,8 +30,9 @@ RTC remains default-off behind `SPEEDTEST_RUST_RTC_EXPERIMENTAL=1` for explicit
 operational enablement; without it, valid RTC requests fail closed503. Do not
 infer permission to replace an existing service from source availability.
 Independent deployment templates and storage admission are in
-[staging](docs/staging.md). Subsequent user-authorized production status and
-Rust rollback must be verified separately.
+[staging](docs/staging.md). The subsequent authorized three-host rollout, actual
+production checks and retained Rust rollback are in
+[production status](docs/production-rollout.md).
 
 Earlier reports are historical snapshots; later passing evidence does not erase
 older failures or relabel their binaries. Start with the final audit/current
@@ -55,8 +56,9 @@ current release status. Linux x86_64 was validated; aarch64 is not claimed.
   SCTP/usrsctp. This is a native C/C++ transport, not a Rust wrapper or FFI.
   Reliable control and unordered zero-retransmission probes remain distinct.
 - Existing frontend and wire protocol are the compatibility contract. Rust
-  sources, production Caddy/systemd, existing archives and rollback material are
-  not changed. Staging must use a different service, directory and port.
+  sources/units, existing archives and rollback material are retained. C++ uses
+  a different service, directory and port; authorized production routing changes
+  are scoped and independently verified in the rollout report.
 
 ### Why these dependencies
 

@@ -5,6 +5,11 @@ provides bounded HTTP streaming and real WebRTC DataChannel probes; the existing
 browser application supplies RTT, jitter, percentile, loss, ordering and stability
 reports. English UI; Chinese deployment notes below.
 
+An independent [C++20 backend](cpp/README.md) is also available alongside the
+preserved Rust implementation, with [compatibility/safety acceptance](cpp/docs/acceptance-audit.md),
+[measured comparison](cpp/docs/performance-findings-recovery.md) and
+[authorized rollout evidence](cpp/docs/production-rollout.md).
+
 ## What is included
 
 - `src/`: Tokio/Axum/Hyper HTTP service, limits, timeouts, signaling, frame codecs,
