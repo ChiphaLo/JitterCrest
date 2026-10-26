@@ -182,3 +182,40 @@ pass. Sanitizer runtime success does not erase static findings or demonstrate
 that every system dependency is source-instrumented. Public deployment-profile
 acceptance, the high-density TSan stall and the final requirement audit remain
 open. **Do not merge/promote a release or replace Rust on this evidence.**
+
+## Late upload ACKs after the final receipt snapshot: shared baseline limitation
+
+Current C++ and reference Rust both remove the measurement's active accounting
+state when producing `downResult`, but still echo a valid kind-1 upload probe
+as a kind-2 ACK when that state is absent. Consequently, a delayed upload can
+be ACKed **after** the final upload-receipt snapshot. If the browser observes
+those ACKs before finishing result processing, its ACK count can exceed the
+snapshot receipt count. The unchanged frontend correctly rejects that mismatch
+as `UPLOAD_RECEIPT_ACCOUNTING`; a server's `complete:true` alone is not enough.
+
+`tests/rtc_late_receipt_contract.py` deterministically exercises this existing
+boundary with actual browser/native ICE, DTLS and SCTP. It starts a two-probe
+measurement, sends a structurally valid completion before delivering the delayed
+upload frames, waits for the original final result, and only then delivers those
+two uploads. Both backends return a snapshot of zero uploaded receipts and then
+ACK both late frames. The original result grace remains at least 299 ms; no
+deadline, reliability or frontend validation rule is relaxed. This deliberately
+late test input represents a receipt-order boundary, not a valid completed
+measurement or a recreation of every public failure.
+
+The test passed three paired rounds in each of Release, ASan+UBSan and TSan
+(three C++ and three reference sessions per profile), without a sanitizer or
+shutdown finding. Its report explicitly marks `baseline_observation_only:true`
+and `measurement_acceptance:false`. This is evidence of equal behavior and an
+existing baseline limitation, **not** a fix or a newly passing stability test.
+Public failures also had independently observed upstream record gaps, described
+in `public-staging-validation.md`; those cannot all be attributed to this
+snapshot mechanism. Any future protocol/accounting correction needs a separate
+decision for the reference implementation rather than a C++-only semantic change.
+
+```sh
+python3 cpp/tests/rtc_late_receipt_contract.py \
+  --cpp /local/cpp-release/speedtest-cpp \
+  --rust /local/reference/speedtest-rust \
+  --rounds 3 --output /private/evidence/late-receipt-baseline.json
+```

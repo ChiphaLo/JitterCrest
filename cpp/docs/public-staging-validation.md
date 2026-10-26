@@ -341,3 +341,75 @@ does not yet identify network loss, NAT/ICE selection, browser feedback or
 server handling as the cause. No timeout, retransmission semantics, payload,
 frontend calculation or 0.99 gate was relaxed. Main merge and production cutover
 remain conditional on completing these acceptance and requirement-audit gates.
+
+### Dual-ended record-header follow-up on unchanged official bundles
+
+A subsequent bounded diagnostic retained the same `cd514ed` UI/agent packages,
+unchanged frontend, original timeouts and original density thresholds. The
+central UI stayed on C++; the probe agent ran C++ and then Rust. Each backend
+had a predeclared four-page schedule: RTT, stability, RTT, stability, with real
+automatic RTT and Restart on each page. This is a **diagnostic transaction, not
+a new four-combination acceptance matrix or a performance benchmark**.
+
+The first diagnostic attempt completed four C++ pages but its browser-side
+collector reported `ENOMEM` after expanding wildcard sockets over many host
+bridge addresses. The exact failing operation was not separately retained;
+those partial traces are not used for packet-loss attribution. Its failures,
+logs and cleanup evidence remain retained. The collector was then restricted
+to the kernel route's current local source address, without changing routing,
+queue limits, host memory settings or backend code. This distinct transaction
+completed both declared backend schedules; it does not erase the first failure.
+
+Collection was restricted in the kernel to owned synthetic UDP sockets and the
+exact test-peer IPv4 address. It retained DTLS **record headers only**, including
+epoch, sequence, length and socket tuple, never ciphertext bodies, application
+payloads, handshake bodies or ICE credentials. The filter admits only
+unfragmented Ethernet/IPv4/UDP with a 20-byte IPv4 header; it does not observe
+IPv6, IP fragments, or IPv4 options. Exact record identities were
+deduplicated across interface copies. Both endpoints had zero reported capture
+drops, overwrites or truncation. The four long-test upload flows below also had
+uninterrupted filter admission between their first and last captured packets;
+their tuples matched the browser's selected ICE pairs. Startup, teardown and
+unmatched short-lived tuples are not counted as established path loss.
+
+| Agent / long test | Sender unique records | Receiver unique records | Interior sender records absent at receiver |
+|---|---:|---:|---:|
+| C++ / first stability page | 4,405 | 3,775 | 630 |
+| C++ / second stability page | 5,028 | 4,562 | 466 |
+| Rust / first stability page | 2,571 | 1,520 | 1,051 |
+| Rust / second stability page | 2,453 | 1,489 | 964 |
+
+These are encrypted transport record counts, **not probe counts or application
+delivery counts**. They establish that some upstream records seen at the browser
+host's egress capture were absent at the agent host's ingress capture, before the
+agent application could consume them. This narrows a contributing fault to the
+segment between those capture points, subject to that filter's coverage limits;
+it still includes source egress queues, virtualization/provider paths,
+in-transit fragmentation/header changes and destination pre-capture handling. It does not
+identify a particular router, firewall or operator, exclude every server defect,
+or prove packet authentication/application delivery for matching headers.
+The reverse directions of these four flows had zero *interior* record gaps;
+small edge differences remain excluded. Host clocks were not calibrated for
+one-way delay attribution. Because conditions changed between sequential runs,
+the table must not be used to rank the languages' loss recovery or performance.
+
+Only **two of eight pages** were protocol-complete: the two C++ RTT pages.
+Both C++ stability pages returned final results but the unchanged frontend
+rejected `UPLOAD_RECEIPT_ACCOUNTING`: snapshot received/observed ACK counts were
+1,641/1,653 and 1,803/1,818 respectively. Rust retained initial RTT, incomplete
+result and result-timeout failures. All failed pages remain failures.
+
+Payload-denial verification now runs independently of measurement success.
+All eight pages produced five separately nonce-correlated browser OPTIONS404
+proofs, with the expected central Origin and no subsequent payload request:
+**20 current C++ and 20 Rust denial proofs**, including failing RTC pages.
+This closes the previous denial-evidence gap, not the RTC acceptance gate.
+
+The late-ACK/snapshot behavior was reproduced separately against both unchanged
+backends; see `transport-compatibility.md` and
+`tests/rtc_late_receipt_contract.py`. That shared baseline limitation is not
+silently fixed in the language migration. No protocol, frontend, reliability,
+timeout or density gate was changed. All temporary units/listeners, browser
+containers and ephemeral secrets were removed; an independent post-cleanup
+check again verified unchanged production on all three hosts. Main merge and
+production cutover remain pending full acceptance and final requirements audit.

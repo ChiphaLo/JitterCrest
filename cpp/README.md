@@ -223,6 +223,13 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
    probe-agent transaction is still incomplete. See
    [public staging](docs/public-staging-validation.md) for both passing subcases
    and retained failures, including the dual-ended WSL return-path evidence.
+   A newer unchanged-bundle header diagnostic established upstream record gaps
+   between the browser-host egress and probe-host ingress for both backends,
+   while only two of eight pages completed. It also closed the failed-page
+   payload-denial evidence gap. See the same report for the limits of that
+   attribution, and `docs/transport-compatibility.md` for the separately
+   reproduced shared late-ACK/receipt-snapshot limitation. Neither observation
+   is a full acceptance pass or permission to change the Rust baseline.
 2. Existing local HTTP/resource, native RTC wire/loss/resource/close/shutdown,
    Debug/Release and separate ASan+UBSan/TSan matrices are recorded in the linked
    validation reports; they do not prove every Internet transport condition.
