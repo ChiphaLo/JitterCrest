@@ -1,5 +1,9 @@
 # Current configuration and native transport follow-up
 
+**Subsequent follow-up:** `receive-fairness.md` records the bounded native
+OpenSSL receive-turn change and its new validation. The failed aggregate below
+is retained for the earlier dependency snapshot, not silently converted to a pass.
+
 These changes do not authorize a production switch. Rust, the frontend, probe
 wire format, statistical definitions and the 0.99 completeness gate are unchanged.
 Earlier reports describe their recorded source snapshots, not automatic safety

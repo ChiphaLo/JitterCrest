@@ -53,6 +53,11 @@ described in `docs/transport-compatibility.md`. Repaired-source safety validatio
 and public deployment-profile acceptance remain required; older green snapshots
 must not be interpreted as approval of a later dependency build.
 
+The subsequent bounded OpenSSL receive-turn follow-up is documented in
+`docs/receive-fairness.md`, including the unchanged flood requirements, retained
+failures and limits of the local transport diagnosis. Public release/production
+acceptance remains separate from that local safety revalidation.
+
 Independent binary/runtime bundling and deterministic archives are described in
 `docs/release-bundle.md`. Packaging never installs a service or authorizes a
 production switch; relocation and target-host tests remain required.
