@@ -238,6 +238,28 @@ transactions to passes. Both hosts' production snapshots still matched after
 temporary units, listeners, browser containers and authorization/key files were
 removed; no production deployment or branch merge occurred.
 
+### Corrected, uninstrumented four-combination follow-up
+
+The corrected denial verifier was subsequently exercised against the original
+uninstrumented UI/agent release bundles, not the control-logging clone. The
+same four central-UI/agent combinations and both public agents were retained.
+Rust/Rust, Rust UI/C++ agents and C++ UI/Rust agents each passed **both** remote
+nodes' automatic RTT, real Restart and 100 packets/s × 20 seconds stability.
+Their probe-agent payload denials were corroborated by all fifteen nonce-matched
+preflight records; the data agent also passed all payload/progress checks.
+
+The C++/C++ data-agent subcase passed again. Its probe-agent subcase passed
+automatic RTT, but failed during Restart before reaching stability. The original
+test assertion did not preserve that failed page's detailed phase/evidence;
+an empty assertion message is not enough to classify it as the earlier ready
+timeout, a missing completion, or a proven network defect. That evidence gap is
+explicit, and future failure capture now saves phase and frontend evidence.
+Thus **three of four complete combinations passed**, not a clean aggregate.
+The original failed subcase and earlier failures remain retained. All three
+hosts' production snapshots still matched after cleanup. This confirms the
+verifier repair on real traffic but does not resolve the remaining intermittent
+setup/transport investigation or authorize a production switch by itself.
+
 Use only an explicitly authorized, isolated endpoint and private evidence paths:
 
 ```sh
