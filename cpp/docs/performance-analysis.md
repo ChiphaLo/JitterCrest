@@ -118,11 +118,15 @@ also higher idle/thread overhead and additional C/C++ dependency safety and
 maintenance burden. Local results are descriptive; three/five rounds and WSL
 noise do not justify a population-level significance claim.
 
-Real-network end-to-end benchmarking, remaining native RTC resource/timeouts,
-successful publicly mapped probe-only acceptance, a complete staging bundle and final acceptance
-audit remain open. Production routes, services and historical archives are
-untouched. This is a completed **local benchmark milestone**, not completion of
-the full C++ refactor or authorization for a cutover.
+Subsequent bounded real-network HTTP benchmarking is recorded separately in
+[network-performance.md](network-performance.md): three alternating rounds,
+36 cases, independent remote CPU/RSS, and explicit WAN/client limitations.
+Complete staging bundles and local RTC resource/close/shutdown matrices are
+also now documented. Public probe-agent control timeouts, final deployment-profile
+acceptance and the full original-requirement audit remain open; see
+[public-staging-validation.md](public-staging-validation.md). Production routes,
+services and historical archives are untouched. These are measured milestones,
+not completion of the full C++ refactor or a performed production cutover.
 
 Subsequent local central-UI-to-separate-agent HTTPS IP and finite HTTP resource
 acceptance is recorded in `agent-resource-validation.md`; it does not alter the

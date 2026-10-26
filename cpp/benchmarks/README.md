@@ -1,5 +1,46 @@
 # Reproducible local benchmarks
 
+## Real-network client
+
+`network_benchmark.py` is a bounded Python standard-library HTTPS load client
+for two **authorized isolated endpoints on the same test host**, not a
+deployment tool. The operator must establish matching hardware/OS/proxy,
+Release optimization, server configuration and resource budgets independently.
+Do not target production merely because credentials are available.
+
+Run `python3 cpp/benchmarks/network_benchmark_test.py`, then invoke the client
+with `--rust-url https://TEST_IP:RUST_TEST_TLS_PORT`,
+`--cpp-url https://TEST_IP:CPP_TEST_TLS_PORT`, `--ca /private/test-ca.pem`,
+optional `--token-file /private/acceptance-token`, and a fresh
+`--output /private/evidence/network.json`. Defaults are three alternating rounds,
+two-second admission windows, 0.5-second warmup and a 512 MiB attempted-payload
+budget; bounded overrides are available through `--help`.
+
+Ordinary supplied-CA/IP-hostname verification stays enabled. The client installs
+no proxy/routing override. An optional temporary X-Speedtest-Acceptance header
+stays out of metadata. Existing outputs are refused before traffic. Errors or
+an exhausted budget retain partial evidence and exit nonzero, without retries.
+Warmup/preconnect failures retain the worker cause rather than only a barrier
+exception. Freeze workloads/artifacts during collection and retain failed runs.
+
+The workload is /latency and 1 MiB upload/download at concurrency 1 and 4.
+Workers preconnect, warm up independently, synchronize measurement admission,
+then drain their last request. Goodput includes drain time. Errors, wrong
+status, byte-count mismatch and oversized responses are not successful payload.
+The attempted-byte budget includes warmup/failures, not exact TLS/wire bytes.
+
+P50/P95/P99 are nearest-rank **observed benchmark request latencies**, not the
+application's differently defined probe percentiles, corrected omission or an
+open-loop SLA. Short windows can produce small sample counts and noisy tails.
+Results include Python/client, network, TLS, proxy and co-tenant effects; they
+cannot isolate language speed or prove NIC saturation. The CLI explicitly marks
+remote CPU/RSS unavailable, never zero. A trusted private orchestrator can use
+`run_workload(..., observe=...)` for independent remote process snapshots.
+Distinguish current RSS from lifetime high-water RSS and document CPU-tick
+quantization and resource-synchronization overhead.
+
+## Native/local measurements
+
 The benchmark runner is a **test client**, not an implementation of either
 backend. It runs two independent local Linux executables in alternating AB/BA
 order and records actual values. Rust production, its sources/configuration,

@@ -78,10 +78,9 @@ answer candidates while the browser remained in ICE checking. Consequently:
 - The failures are **not** classified as exclusively Rust defects.
 - Correct candidate addresses alone do not prove that UDP requests/replies
   reached either endpoint.
-- Network/route loss versus server transport behavior has **not** been causally
-  separated. The next diagnostic needs synchronized, own-test-socket-scoped
-  STUN/DTLS header counters, not another round of blind retries or relaxed
-  connection deadlines.
+- The original run did not separate network/route loss from server transport
+  behavior. The later scoped dual-ended investigation below narrows the ICE
+  failure, but does not explain every control-message timeout.
 - No merge or production switch is justified by selecting only the passing
   profiles. These public-network failures remain an acceptance investigation.
 
@@ -109,6 +108,80 @@ one-to-one NAT additionally needed Caddy's `default_sni` set to that test IP;
 its SAN/chain checks were kept enabled. These were isolated test-configuration
 repairs, not changes to production Caddy or TLS verification.
 
+## Follow-up: dual-ended headers and an independent client vantage
+
+A bounded investigation observed only the staging processes' owned UDP sockets.
+The AF_PACKET filter initially rejected everything, then admitted only those
+exact socket endpoints. It read at most 50 bytes (Ethernet, IPv4, UDP and eight
+protocol-header bytes), storing lengths/directions and STUN/DTLS kinds, never
+payloads, ICE credentials, transaction IDs or encrypted bodies. Filters were
+disarmed before releasing sockets, preventing capture of a later port owner.
+Six private collector tests included live positive/negative kernel filters,
+process socket ownership, dual-stack discovery and an egress-tap control.
+
+An initial `ETH_P_IP` collector observed ingress only. Its absence of egress is
+**not evidence of a missing server response**. The corrected collector used an
+`ETH_P_ALL` packet tap with the same narrow IPv4 BPF filter. The completed
+corrected run had zero kernel drops, overwritten records or read errors:
+
+| Header observation | C++ | Rust |
+|---|---:|---:|
+| WSL outbound STUN requests | 769 | 768 |
+| Server inbound STUN requests | 710 | 668 |
+| Server outbound STUN-success responses | 144 | 668 |
+| Server-originated outbound STUN requests | 407 | 3,764 |
+| Scoped inbound packets at WSL | 0 | 0 |
+
+All twelve connections failed ICE. Each attempt kept one local UDP source port,
+while the server saw 15 distinct source ports per C++ attempt and 68 per Rust
+attempt. Counts are not packet-by-packet identities: header-only capture omits
+transaction IDs, and network duplication/retransmission is possible. The trace
+does establish that requests reached the server and responses left its NIC,
+but no scoped return packet reached WSL. This implicates the intervening return
+path/NAT/proxy mapping; it does **not** identify the failing hop or prove every
+server request received a response. Backend behavior under rotating mappings
+may differ and was not patched merely to force a passing diagnostic.
+
+An independent headless Chromium client then ran in a temporary, bounded,
+capability-dropped, read-only-root Docker container on the authorized UI host.
+GPU use was disabled. The client used real public IP HTTPS origins and scoped
+test-certificate pins, without SDP rewrites, routing changes, response mocks or
+frontend test hooks. The locally built deployment-frontend UI artifact (not
+generic public node aliases) served the unchanged page; the two remote agents
+contained no UI assets. Exact deployment identifiers/configuration remained
+private. Both native backends were still independent staging processes.
+
+Four combinations were exercised: C++ UI/C++ agents, Rust UI/Rust agents,
+Rust UI/C++ agents and C++ UI/Rust agents. In **all four**, the public data agent
+passed automatic RTT rendering, the real Restart action, a real 100 packets/s
+× 20 seconds Stability action with the existing .99 validation gate, all three
+payload sizes, upload and live progress accounting. Browser candidate evidence
+identified the actual remote public IP over UDP. Proxy access records confirmed
+real cross-site browser OPTIONS/POST traffic and exact central-origin CORS
+responses. This is actual central-UI-to-agent Internet traffic, not the earlier
+local TLS fixture. It further separates the WSL/data-agent ICE failure from an
+inability of that agent to operate with either implementation.
+
+The probe-only agent remains unresolved: the first C++-agent combination had a
+`measurementReady timeout`; the Rust/Rust combination lacked upload completion
+and failed frontend stability validation. The two mixed combinations completed
+stability, but their subsequent payload-denial checks encountered browser CORS
+rejection: the test Authorization header triggered preflight, and the backend
+correctly returned 404 to that preflight. A rejected fetch is not an HTTP 404
+response object. Private proxy logs independently confirm those 404 preflight
+denials. This test-expectation issue must not erase the earlier genuine control
+failures or promote the entire transaction to a pass. These failures are not
+classified as exclusively C++ or exclusively the WSL route.
+
+All four combination results remain recorded as failed; the passing data-agent
+subcases are reported separately. Temporary browser containers, unit files,
+listeners, authorization configs and TLS private keys were removed. Before/after
+production process/unit/configuration/release snapshots still matched on all
+three hosts. The deployment-frontend UI package separately passed eight CTests,
+126 paired HTTP contracts, relocated library/checksum checks, actual frontend
+RTT and a native close/recovery regression. It is a candidate, not a promoted
+production release. No branch merge or production switch has occurred.
+
 ## Reproduction and remaining boundary
 
 Use only an explicitly authorized, isolated endpoint and private evidence paths:
@@ -126,15 +199,15 @@ The token, CA/key generation, target selection and service administration belong
 in private operations tooling, not the published source or reports. A public-IP
 test does not bypass the workstation's ordinary network/routing policy.
 
-These are functionality/portability checks, **not** the required fair real-network
-throughput/CPU/RSS/tail-latency benchmark. The earlier local cross-site central-
-UI/agent matrix remains separate; this staging client navigates directly to each
-target, so it does not by itself prove the full public central-UI-to-multiple-agent
-cross-origin flow. That flow, the unresolved transport observations, final
-deployment-profile acceptance and the final requirements audit remain open.
+These are functionality/portability checks, **not** a fair real-network
+throughput/CPU/RSS/tail-latency benchmark. The original direct-target client and
+the earlier local cross-site matrix remain separate from the actual public
+central-UI/multiple-agent follow-up above. That follow-up passed the data-agent
+subcases but still leaves probe-agent control failures, final deployment-profile
+acceptance and the final requirements audit open.
 
-Public builds intentionally use generic node identifiers/configuration. A later
-production UI build must select the preserved deployment frontend using
-`SHARED_ASSETS` and validate the actual node list/role configuration; do not blindly
+Public builds intentionally use generic node identifiers/configuration. The
+deployment UI build selected the preserved frontend using
+`SHARED_ASSETS` and validated the actual node list/role configuration; do not blindly
 substitute a generic frontend for private deployment aliases. Neither the
 preserved frontend nor Rust source was edited in this milestone.

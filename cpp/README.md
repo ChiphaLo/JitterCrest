@@ -206,27 +206,36 @@ cpp/build/fuzz/speedtest-core-fuzz -runs=10000 -max_len=65536
 
 ## Remaining acceptance work (not yet achieved)
 
-1. Extend the remaining HTTP/native RTC security/edge-case and resource-exhaustion
-   matrix beyond the finite admission/reset/progress/socket-cap tests now passed;
-   complete successful publicly mapped probe-only connectivity. Cross-site central
-   UI-to-agent HTTPS IP, CORS/CSP and browser RTT/payloads are now tested locally.
-   External provider behavior was tested with injected deterministic
-   fixtures, not declared validated against every third-party response.
-2. Extend and complete acceptance of the implemented native WebRTC session
-   limits, cancellation/tombstones, zero-retry probes, scheduler/grace accounting,
-   result fragmentation and the remaining probe-only/public browser integration.
-3. Debug/Release plus all required sanitizer/static-analysis gates for the full
-   service; malicious/slow/half-close/disconnect/reconnect/concurrency cases.
-4. Shared Rust/C++ offline and HTTP/browser contracts, including UI/agent and
-   probe-only deployment behavior with explicit environment configuration.
-5. Local multi-round Release/ThinLTO computation and HTTP benchmarks, CPU/RSS,
+1. Resolve the remaining public probe-agent control failures without relaxing
+   protocol deadlines or the .99 scheduler-density gate. The actual public
+   central UI/data-agent flow passed four mixed Rust/C++ combinations, while the
+   probe-agent transaction is still incomplete. See
+   [public staging](docs/public-staging-validation.md) for both passing subcases
+   and retained failures, including the dual-ended WSL return-path evidence.
+2. Existing local HTTP/resource, native RTC wire/loss/resource/close/shutdown,
+   Debug/Release and separate ASan+UBSan/TSan matrices are recorded in the linked
+   validation reports; they do not prove every Internet transport condition.
+   The two raw full-service Clang analyzer findings remain nonzero, with scoped
+   model-false-positive evidence in [coroutine analysis](docs/coroutine-analysis.md),
+   not a falsely clean Tidy claim. External providers used deterministic fixtures,
+   not a claim of validation against every third-party response.
+3. Shared Rust/C++ offline and HTTP/browser contracts include independently
+   configured UI, no-UI agents, and probe-only roles. Complete final production
+   profile acceptance and the original requirement-by-requirement audit rather
+   than treating these finite suites as full goal completion.
+4. Local multi-round Release/ThinLTO computation and HTTP benchmarks, CPU/RSS,
    P50/P95/P99, accepted connections and five-minute stability are measured in
-   the reports above. Real-network end-to-end performance and longer-running
-   stability remain unmeasured; local observations do not establish either.
-6. Independent systemd/Caddy templates are provided in `deploy/`, with their
-   isolation/rollback design in `docs/staging.md`. Live staging, Caddy validation,
-   reproducible complete deployment bundle, measured reports and final verdict
-   remain pending. No template has been installed into production.
+   the reports above. A separate three-round, 36-case bounded Internet HTTP
+   comparison with remote CPU/RSS is now in
+   [network performance](docs/network-performance.md). Longer-running Internet
+   stability remains unmeasured; these short cases do not establish it.
+5. Independent systemd/Caddy templates are provided in `deploy/`, with their
+   isolation/rollback design in `docs/staging.md`. Reproducible UI/agent bundles,
+   relocation tests, temporary hardened VPS units and staged C++/Rust/C++ proxy
+   backout have been exercised. The preserved deployment frontend also passed
+   its separate build/HTTP/relocation checks. Final acceptance, conditional branch
+   merge and backed-up production deployment remain pending. No production route,
+   release link or service has been switched.
 
-Current core validation is a development milestone only. Full functionality,
+Current validation is a development milestone only. Full functionality,
 performance superiority and readiness to replace Rust remain unproven.

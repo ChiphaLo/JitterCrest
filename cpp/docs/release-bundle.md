@@ -92,3 +92,11 @@ Eight packaging unit tests passed. Two independently generated UI archives from
 the same inputs had identical SHA-256 values. This is local relocation and
 deterministic packaging evidence, not target-VPS portability, effective systemd
 hardening, Internet performance or production/rollback acceptance.
+
+Subsequent actual VPS staging/hardening and the separately built preserved
+deployment-frontend UI are described in
+[public-staging-validation.md](public-staging-validation.md); bounded Internet
+measurements are in [network-performance.md](network-performance.md). Those
+later checks do not change this local packaging experiment into production
+acceptance. Rust remains production and rollback, with unresolved probe-agent
+observations and the final acceptance audit preceding any conditional cutover.
