@@ -219,3 +219,72 @@ python3 cpp/tests/rtc_late_receipt_contract.py \
   --rust /local/reference/speedtest-rust \
   --rounds 3 --output /private/evidence/late-receipt-baseline.json
 ```
+
+## Native message-size negotiation and the reference read boundary
+
+Real browser negotiation found a separate compatibility defect: reference Rust
+omits `a=max-message-size`, so the browser applies the RFC8841 default of
+65,536 bytes. C++ had incorrectly advertised the **2 MiB aggregate control
+reassembly budget** as a single native message capability; Chromium exposed a
+262,144-byte send limit. The original official bundle failed the new negotiated
+cap regression while the unchanged Rust reference passed. That failure and
+bundle remain retained, not renamed as a corrected release.
+
+C++ now configures the native message capability as 65,536 bytes, independently
+of the aggregate application fragment budget. Both native answers now omit the
+default attribute and both browsers expose the same 65,536-byte limit. The
+application's normal 16 KiB per-control-message policy, 128-byte probe layout,
+fragment format/reassembly limits, reliability and deadlines remain unchanged.
+libdatachannel's existing internal buffer minimum follows its configured native
+message size; this is not a change to probe scheduling or an RTO override.
+
+A positive-edge test then exposed an existing reference limitation: its native
+DataChannel read buffer is `u16::MAX` bytes, **65,535**, not 65,536. With BOTH
+fixtures explicitly configured to permit 64 KiB application control messages,
+a valid 65,535-byte JSON message is delivered and a subsequent real measurement
+succeeds; a 65,536-byte message is accepted by the browser but closes the reference
+peer before application dispatch. A 65,537-byte send is rejected by the browser
+as `TypeError`, before transmission. The normal 16 KiB application policy must
+not be mistaken for this transport-boundary test configuration.
+
+The first positive test mistakenly expected 65,536 to survive the normal 16 KiB
+application policy; that fixture failure is retained. Repeating with the correct
+explicit legal application ceiling demonstrated the distinct reference read
+boundary above. A cap-only C++ build still failed that close-boundary comparison.
+C++ therefore also enforces the reference 65,535-byte native dispatch boundary
+before application byte/message accounting, using its existing peer cleanup and
+tombstone path. Rust and its dependency sources were not edited. This preserves
+the current baseline limitation rather than silently fixing Rust in a migration.
+
+Verification scopes are intentionally separated:
+
+- The negotiated-cap correction rebuilt Debug/Release/ASan+UBSan/TSan and passed
+  eight CTests plus paired real negotiation in each. Release and both sanitizer
+  profiles also passed resource13, untraced close/recovery100, native wire22 and
+  shutdown3 suites. Those reports precede the subsequent read-boundary guard.
+- After the additional read-boundary guard, all four profiles rebuilt and passed
+  eight CTests plus the full paired boundary fixture: valid65,535, close65,536,
+  reject65,537, unchanged real20pps×2s measurement and closed-attempt409 behavior.
+  This is targeted validation of the final guard, not a relabeling of the earlier
+  full runtime matrix as having been rerun on it.
+- `tests/frontend_statistics_contract.py` separately checked 510 golden inputs
+  against the actual statistic helpers served by both preserved-UI backends.
+  Percentiles, scaled MAD, adjacent-difference mean, population standard deviation,
+  timing thresholds and both trimmed stable-rate functions matched at `1e-12`
+  relative/absolute tolerance; the served helper source was identical. This is
+  offline arithmetic evidence, not a fake RTC or Internet measurement.
+
+```sh
+python3 cpp/tests/native_message_cap_contract.py \
+  --cpp /local/cpp/speedtest-cpp --rust /local/reference/speedtest-rust \
+  --output /private/evidence/native-message-cap.json
+python3 cpp/tests/frontend_statistics_contract.py \
+  --cpp /local/cpp-ui/speedtest-cpp --rust /local/reference/rust-ui \
+  --output /private/evidence/frontend-statistics.json
+```
+
+The previous fairness bundles, public8/8 profile and performance measurements are
+still identified by their original hashes. They do not include this correction.
+New independent bundles/relocation and their deployment-profile checks are still
+required. The severe-outage/result-delay investigation is separate and is not
+claimed fixed by the message-cap correction.

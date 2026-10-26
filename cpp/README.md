@@ -1,7 +1,8 @@
-# Independent C++20 backend — implementation in progress
+# Independent C++20 backend — acceptance in progress
 
-**This is not yet a complete Speedtest server and must not replace the Rust
-production service.** The full target includes HTTP streaming, upload progress,
+**The independent HTTP/WebRTC implementation is present, but final compatibility
+and release acceptance are incomplete. It must not replace the Rust production
+service yet.** The full target includes HTTP streaming, upload progress,
 WebRTC probes/control, cancellation/accounting, safety checks, shared-client
 integration tests and measured Rust/C++ benchmarks. A green core test is not a
 claim that those end-to-end requirements are complete.
@@ -19,9 +20,17 @@ as a production backend. See `docs/rtc-validation.md` for current RTC evidence,
 and outstanding safety gates; `docs/core-validation.md` is the earlier core
 snapshot, not an all-current-source safety claim.
 
-Local Release/ThinLTO performance measurements are now available in
-`docs/local-performance.md`, with interpretation in `docs/performance-analysis.md`
-and reproducible commands in `benchmarks/README.md`. They cover five native-core
+The requirement-by-requirement status and remaining gates are in
+`docs/acceptance-audit.md`; it explicitly does not declare the full goal complete.
+
+Release/ThinLTO measurements of the receive-fairness snapshot are available in
+`docs/local-performance-current.md`, with interpretation in
+`docs/current-performance-findings.md`. The original frozen measurements remain
+in `docs/local-performance.md` and `docs/performance-analysis.md`.
+The distinct same-snapshot Internet revalidation is in
+`docs/network-performance-fairness.md`. All reports pin their measured artifacts;
+they must not be relabeled as a later corrected binary.
+Reproducible commands are in `benchmarks/README.md`. Both runs cover five native-core
 rounds, three HTTP rounds and five minutes of mixed traffic per backend. Rust
 leads most measured payload throughput cases; C++ has some lightweight-request
 and high-concurrency RSS advantages. These are local results, not Internet
@@ -57,6 +66,12 @@ The subsequent bounded OpenSSL receive-turn follow-up is documented in
 `docs/receive-fairness.md`, including the unchanged flood requirements, retained
 failures and limits of the local transport diagnosis. Public release/production
 acceptance remains separate from that local safety revalidation.
+
+The subsequent native message-cap/read-boundary correction and its explicit
+before/after verification scopes are in `docs/transport-compatibility.md`.
+The older fairness bundles and their public eight-case result must not be
+relabeled as this corrected binary. The actual-served shared frontend arithmetic
+fixture is `tests/frontend_statistics_contract.py` (offline, not a mock RTC pass).
 
 Independent binary/runtime bundling and deterministic archives are described in
 `docs/release-bundle.md`. Packaging never installs a service or authorizes a

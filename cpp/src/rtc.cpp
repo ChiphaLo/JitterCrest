@@ -411,8 +411,10 @@ awaitable<Json> RtcService::Impl::offer(std::string ip, std::string attempt, std
             rtc::Configuration native;
             native.disableAutoNegotiation = true;
             native.enableIceTcp = false;
-            native.maxMessageSize = static_cast<std::size_t>(std::max(
-                owner->cfg.rtc_control_message_bytes, owner->cfg.control_reassembled_bytes));
+            // Rust omits max-message-size in its answer: RFC 8841's default
+            // is 64 KiB. Reassembly limits cover multiple control messages,
+            // not one native SCTP message or its negotiated receive capacity.
+            native.maxMessageSize = 65536;
             if (owner->cfg.rtc_udp4)
                 native.bindAddress = mapping_interface(*owner->cfg.rtc_udp4);
             else if (owner->cfg.rtc_local_test)
@@ -529,7 +531,11 @@ void Peer::post_message(std::string label, rtc::message_variant message) noexcep
             return;
         const auto bytes = std::visit([](const auto &value) { return value.size(); }, message);
         std::string_view violation;
-        if (inbound_bytes.fetch_add(bytes) + bytes > cfg.rtc_inbound_bytes_max)
+        // The reference native read loop has a uint16_t-sized buffer. Match
+        // its close/tombstone boundary before application message accounting.
+        if (bytes > std::numeric_limits<std::uint16_t>::max())
+            violation = "native-message-size-limit";
+        else if (inbound_bytes.fetch_add(bytes) + bytes > cfg.rtc_inbound_bytes_max)
             violation = "inbound-byte-limit";
         else if (label == "test") {
             if (bytes != frame_bytes || inbound_test.fetch_add(1) >= cfg.rtc_test_messages_max)
