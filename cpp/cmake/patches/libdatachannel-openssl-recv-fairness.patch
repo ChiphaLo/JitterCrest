@@ -1,0 +1,17 @@
+--- a/src/impl/dtlstransport.cpp
++++ b/src/impl/dtlstransport.cpp
+@@ -962,8 +962,13 @@
+ 		const size_t bufferSize = 4096;
+ 		byte buffer[bufferSize];
+ 
+-		// Process pending messages
++		// Bound each executor turn so SCTP's receive/flush tasks can run.
++		size_t processed = 0;
+ 		while (mIncomingQueue.running()) {
++			if (processed++ == 64) {
++				enqueueRecv();
++				return;
++			}
+ 			auto next = mIncomingQueue.pop();
+ 			if (!next) {
+ 				// No more messages pending, handle timeout if connecting

@@ -1,0 +1,27 @@
+# TEMPLATE ONLY. Run separately from production Caddy; do not import this into
+# an existing production configuration during local C++ development.
+(cpp_staging) {
+    # Intentionally no compression for measurement payloads or NDJSON.
+    reverse_proxy 127.0.0.1:32132 {
+        header_up X-Real-IP {http.request.remote.host}
+        header_up X-Forwarded-For {http.request.remote.host}
+        flush_interval -1
+    }
+    log {
+        output stdout
+        format json
+    }
+}
+
+http://127.0.0.1:32133 {
+    import cpp_staging
+}
+
+# For an explicitly authorized HTTPS staging deployment only:
+# - replace the reserved example domain with your own staging domain;
+# - configure trusted certificates/DNS, firewall and a separate Caddy instance;
+# - update ALLOWED_ORIGINS and any frontend node config to the exact origin;
+# - never reuse or change a production Rust host/route/service to test this.
+# https://cpp-speed.example.invalid {
+#     import cpp_staging
+# }

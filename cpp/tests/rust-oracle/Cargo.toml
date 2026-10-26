@@ -1,0 +1,18 @@
+[package]
+name = "speedtest-rust-oracle"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde_json = { version = "=1.0.151", features = ["preserve_order"] }
+base64 = "=0.22.1"
+getrandom = "=0.3.4"
+anyhow = "=1.0.104"
+
+[features]
+default = ["web-ui"]
+web-ui = []
+
+[profile.release]
+lto = "thin"

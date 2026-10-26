@@ -1,0 +1,56 @@
+--- a/src/impl/dtlstransport.cpp
++++ b/src/impl/dtlstransport.cpp
+@@ -866,44 +866,53 @@
+ 		size_t mtu = mMtu.value_or(DEFAULT_MTU) - 8 - 40; // UDP/IPv6
+ 		SSL_set_mtu(mSsl, static_cast<unsigned int>(mtu));
+ 		PLOG_VERBOSE << "DTLS MTU set to " << mtu;
+ 
+ 		// Initiate the handshake
+ 		ret = SSL_do_handshake(mSsl);
+ 		err = SSL_get_error(mSsl, ret);
+ 	}
+ 
+ 	openssl::check_error(err, "Handshake failed");
+ 
+ 	// start() can run on the libjuice poll thread via the ICE state-change
+ 	// callback, while juice still holds its registry mutex. Calling
+ 	// handleTimeout() inline then waits on mSslMutex, which a thread pool
+ 	// recv thread may hold while blocked in juice_send (conn_lock) on the
+ 	// TURN relay path, forming an ABBA deadlock. Defer the initial timeout
+ 	// handling to the thread pool, as the other TLS backends do.
+ 	enqueueRecv(); // to initiate the handshake
+ }
+ 
+ void DtlsTransport::stop() {
+ 	PLOG_DEBUG << "Stopping DTLS transport";
++	// stop() is also called from the destructor. enqueueRecv() retains only
++	// a weak pointer: its shutdown task may never run once the last owner
++	// releases us. Send close_notify while SSL and the ICE lower transport
++	// are still alive; do not depend on asynchronous destructor work.
++	{
++		std::lock_guard lock(mSslMutex);
++		if (SSL_is_init_finished(mSsl) && !(SSL_get_shutdown(mSsl) & SSL_SENT_SHUTDOWN))
++			SSL_shutdown(mSsl); // first call sends only; never wait for the peer
++	}
+ 	unregisterIncoming();
+ 	mIncomingQueue.stop();
+ 	enqueueRecv();
+ }
+ 
+ bool DtlsTransport::send(message_ptr message) {
+ 	if (!message || state() != State::Connected)
+ 		return false;
+ 
+ 	PLOG_VERBOSE << "Send size=" << message->size();
+ 
+ 	int ret, err;
+ 	{
+ 		std::lock_guard lock(mSslMutex);
+ 		mCurrentDscp = message->dscp;
+ 		ret = SSL_write(mSsl, message->data(), int(message->size()));
+ 		err = SSL_get_error(mSsl, ret);
+ 	}
+ 
+ 	if (!openssl::check_error(err))
+ 		return false;
+ 

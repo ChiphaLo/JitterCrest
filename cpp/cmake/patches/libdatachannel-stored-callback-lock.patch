@@ -1,0 +1,54 @@
+diff --git a/include/rtc/utils.hpp b/include/rtc/utils.hpp
+index be27733..6c4252b 100644
+--- a/include/rtc/utils.hpp
++++ b/include/rtc/utils.hpp
+@@ -104,9 +104,46 @@ protected:
+ template <typename... Args>
+ class synchronized_stored_callback final : public synchronized_callback<Args...> {
+ public:
+-	template <typename... CArgs>
+-	synchronized_stored_callback(CArgs &&...cargs)
+-	    : synchronized_callback<Args...>(std::forward<CArgs>(cargs)...) {}
++	synchronized_stored_callback() = default;
++	synchronized_stored_callback(std::function<void(Args...)> func)
++	    : synchronized_callback<Args...>(std::move(func)) {}
++	synchronized_stored_callback(const synchronized_stored_callback &other) {
++		std::lock_guard lock(other.mutex);
++		this->callback = other.callback;
++		stored = other.stored;
++	}
++	synchronized_stored_callback(synchronized_stored_callback &&other) {
++		std::lock_guard lock(other.mutex);
++		this->callback = std::exchange(other.callback, nullptr);
++		stored = std::move(other.stored);
++		other.stored.reset();
++	}
++	synchronized_stored_callback &operator=(const synchronized_stored_callback &other) {
++		if (this != &other) {
++			std::scoped_lock lock(this->mutex, other.mutex);
++			set(other.callback);
++			stored = other.stored;
++		}
++		return *this;
++	}
++	synchronized_stored_callback &operator=(synchronized_stored_callback &&other) {
++		if (this != &other) {
++			std::scoped_lock lock(this->mutex, other.mutex);
++			set(std::exchange(other.callback, nullptr));
++			stored = std::move(other.stored);
++			other.stored.reset();
++		}
++		return *this;
++	}
++	synchronized_stored_callback &operator=(std::function<void(Args...)> func) {
++		// The inherited base assignment only locks its own operation. Default
++		// derived assignment would then copy stored outside that lock.
++		std::lock_guard lock(this->mutex);
++		set(std::move(func));
++		if (!this->callback)
++			stored.reset();
++		return *this;
++	}
+ 	~synchronized_stored_callback() {}
+ 
+ private:

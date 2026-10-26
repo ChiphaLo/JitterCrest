@@ -1,0 +1,7 @@
+# Conventional return syntax and non-wire enum sizing are style, not safety gates.
+Checks: '-*,clang-analyzer-*,bugprone-*,performance-*,-performance-enum-size,modernize-*,-modernize-use-trailing-return-type,concurrency-*,readability-identifier-naming,cppcoreguidelines-pro-type-cstyle-cast,cppcoreguidelines-owning-memory'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/cpp/(include|src)/.*'
+CheckOptions:
+  - key: modernize-use-trailing-return-type.IgnoreLambdas
+    value: true
