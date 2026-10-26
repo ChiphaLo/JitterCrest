@@ -287,3 +287,57 @@ deployment UI build selected the preserved frontend using
 `SHARED_ASSETS` and validated the actual node list/role configuration; do not blindly
 substitute a generic frontend for private deployment aliases. Neither the
 preserved frontend nor Rust source was edited in this milestone.
+
+### Bounded-receive current-artifact follow-up
+
+The `cd514ed` follow-up used newly built, relocated UI/agent bundles containing
+the explicit OpenSSL receive-turn fairness patch; see `receive-fairness.md` for
+the current four-profile local safety evidence. It did not reuse or relabel the
+older release bundles, metadata-logging server clone or failed local flood run.
+
+An initial transaction ended during the UI archive upload with an SSH EOF/reset,
+before any measurement or temporary service started. Dead SSH connections also
+prevented immediate cleanup/snapshot confirmation. Independent reconnection
+subsequently proved that its exact owned units/listeners/processes were absent
+and all three production identities/configurations matched their before-images.
+The partial archive and failed report were retained. This is a recovered
+**transfer failure**, not a WebRTC result or evidence of a production mutation.
+The next distinct transaction used SSH keepalives and transfer progress, verified
+the complete archive hashes, and started only the separate guarded test units.
+No system routing/proxy policy was changed; the first reset's cause is unproven.
+
+The unchanged central frontend again ran automatic RTT, actual Restart and
+100 packets/s × 20 seconds stability against both public-IP HTTPS agents:
+
+| Central UI / agents | Probe-only node | Data node |
+|---|---|---|
+| C++ / C++ | Incomplete stability result | Passed |
+| Rust / Rust | Automatic RTT failed before stability | Passed |
+| Rust / C++ | Stability `downResult timeout` | Passed |
+| C++ / Rust | Passed | Passed |
+
+Thus **five of eight node subcases and one of four complete combinations
+passed**, not full deployment acceptance. The first C++ probe-node failure now
+has detailed retained evidence: its client scheduled/sent all 2,000 upload probes,
+but the server reported 413 received uploads, 412 returned download ACKs and
+`UPLOAD_COMPLETE_MISSING`, producing a non-final/incomplete result. This is not
+the same observation as the separate C++ result timeout. The Rust probe-node
+failure occurred in the initial RTT phase, not in stability finalization.
+
+The successful probe-node subcase's five browser payload-denial observations
+were independently corroborated by their exact nonce-matched proxy preflights,
+central Origin and lack of subsequent payload requests. The failing C++
+probe-node cases did not reach that client's later denial check; they must not
+be counted as new public C++ denial proofs merely because earlier/local role
+checks passed. All four data-node subcases completed their payload/progress and
+cross-site measurement checks.
+
+After the transaction, all owned units, listeners, ephemeral keys/configs and
+browser containers were removed; production process/start identities, binaries,
+unit files, current links and Caddy configuration matched. A separate subsequent
+SSH check corroborated cleanup and unchanged production on all three targets.
+All failed measurements remain retained. The node/role/path-specific pattern
+does not yet identify network loss, NAT/ICE selection, browser feedback or
+server handling as the cause. No timeout, retransmission semantics, payload,
+frontend calculation or 0.99 gate was relaxed. Main merge and production cutover
+remain conditional on completing these acceptance and requirement-audit gates.

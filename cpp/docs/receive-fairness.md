@@ -133,3 +133,7 @@ Do not promote an old artifact that lacks the new dependency patch. Actual
 public central/multiple-agent acceptance, final requirement audit and the
 conditionally authorized merge/production deployment remain outstanding. Rust,
 the frontend, existing archives and production services have not been modified.
+The subsequent current-artifact public transaction is recorded separately in
+`public-staging-validation.md`: all four data-node subcases passed, but the probe
+node retained two C++ failures and one Rust failure. The local fairness repair
+therefore is not presented as a cure for those public transport observations.
