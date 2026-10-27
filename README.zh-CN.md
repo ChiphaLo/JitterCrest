@@ -1,5 +1,7 @@
 # JitterCrest
 
+[English](README.md) | 简体中文
+
 JitterCrest 是一个自托管的浏览器测速与网络质量分析项目。C++20 后端提供 HTTP 流式测速和 WebRTC 探针；浏览器展示上下行速度、延迟、抖动、丢包与游戏稳定性等结果。
 
 > 当前维护版本为 **C++20**。Rust 和 Node.js 版本仅作为历史源码保存在 [archive/](archive/) 中，不参与默认构建和 CI。

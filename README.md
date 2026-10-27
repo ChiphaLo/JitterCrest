@@ -2,8 +2,8 @@
 
 [简体中文](README.zh-CN.md) | English
 
-JitterCrest is a self-hosted network quality tool. Its maintained backend is C++20: bounded asynchronous HTTP streaming, upload
-progress and native WebRTC DataChannel probes. The browser renders download /
+JitterCrest is a self-hosted network quality tool. Its maintained C++20 backend
+provides bounded HTTP streaming, upload progress and native WebRTC DataChannel probes. The browser renders download /
 upload charts and RTT, jitter, percentile, loss, ordering and stability reports.
 Building and running the active service requires neither Rust nor Node/npm.
 
@@ -17,7 +17,8 @@ Building and running the active service requires neither Rust nor Node/npm.
 - `archive/node/`: older sanitized Node reference.
 
 Archives are excluded from the default CMake build and CI. They are historical
-references, not maintained alternative production backends. Legacy configuration names do not imply a Rust runtime dependency.
+references, not maintained alternative production backends. Legacy configuration
+names do not imply a Rust runtime dependency.
 
 ## Build and test
 
