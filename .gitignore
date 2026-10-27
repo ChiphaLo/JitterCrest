@@ -11,6 +11,6 @@ __pycache__/
 /backups/
 /work/
 
-# Active CMake output; historical Rust outputs are ignored by their archive.
+# JitterCrest: exclude local CMake builds and preserve archive-specific ignores.
 /build/
 /cmake-build-*/
