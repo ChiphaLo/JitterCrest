@@ -1,3 +1,5 @@
+<!-- JitterCrest contributor and repository guidance. -->
+
 # Repository updates
 
 - After a completed code or documentation update, run the relevant checks, create a Git commit, and push it to the configured GitHub remote. Read-only reviews do not require empty commits.
