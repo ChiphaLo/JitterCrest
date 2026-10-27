@@ -1,5 +1,4 @@
 /build*/
 /out/
-/tests/rust-oracle/target/
 __pycache__/
 *.pyc

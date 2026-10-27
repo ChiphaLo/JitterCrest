@@ -1,5 +1,10 @@
 # C++20 objective acceptance — completed with explicit limits
 
+**Later maintenance policy:** Rust was subsequently frozen under `archive/rust/`
+and its server rollback removed by explicit user request. See
+[current archive/retirement status](rust-archive.md); the retained-source/service
+checks below describe their original acceptance date, not a continuing rollback.
+
 Runtime source: `019ff35821f974d80ab223e0fed4f19f7b01a6fb`.
 This is the final development/deliverable audit, not a universal equivalence or
 zero-risk certification. It supersedes earlier incomplete status summaries;

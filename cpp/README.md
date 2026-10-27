@@ -30,9 +30,10 @@ RTC remains default-off behind `SPEEDTEST_RUST_RTC_EXPERIMENTAL=1` for explicit
 operational enablement; without it, valid RTC requests fail closed503. Do not
 infer permission to replace an existing service from source availability.
 Independent deployment templates and storage admission are in
-[staging](docs/staging.md). The subsequent authorized three-host rollout, actual
-production checks and retained Rust rollback are in
-[production status](docs/production-rollout.md).
+[staging](docs/staging.md). The initial authorized three-host rollout is recorded in
+[production history](docs/production-rollout.md). The subsequent user-requested
+[Rust archive and server-side retirement](docs/rust-archive.md) is the current
+policy: only C++ is maintained and no server-side Rust rollback remains.
 
 Earlier reports are historical snapshots; later passing evidence does not erase
 older failures or relabel their binaries. Start with the final audit/current
