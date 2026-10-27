@@ -1,2 +1,2 @@
-# Historical implementations are not active-language statistics.
+# JitterCrest: exclude historical implementations from language statistics.
 archive/** linguist-vendored=true
