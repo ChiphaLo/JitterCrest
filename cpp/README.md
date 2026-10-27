@@ -1,4 +1,4 @@
-# Independent C++20 Speedtest backend
+# JitterCrest C++20 后端
 
 The sole maintained backend is C++20 HTTP/WebRTC. The frozen Rust reference is
 in [`archive/rust/`](../archive/rust/ARCHIVE.md), outside active build and CI. Runtime never invokes Rust, Node or Python; Rust is used only as

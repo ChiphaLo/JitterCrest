@@ -1,4 +1,4 @@
-name: C++20
+name: JitterCrest C++20
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
