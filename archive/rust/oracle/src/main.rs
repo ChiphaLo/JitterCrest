@@ -1,14 +1,14 @@
 extern crate self as speedtest_rust;
-#[path = "../../../../src/config.rs"] mod reference_config;
+#[path = "../../src/config.rs"] mod reference_config;
 // Test-only oracle: compiles original Rust pure modules without modifying them.
 // The C++ service never links or invokes this program.
-#[path = "../../../../src/protocol.rs"]
+#[path = "../../src/protocol.rs"]
 mod protocol;
-#[path = "../../../../src/rtc_control.rs"]
+#[path = "../../src/rtc_control.rs"]
 mod rtc_control;
-#[path = "../../../../src/rtc_sdp.rs"]
+#[path = "../../src/rtc_sdp.rs"]
 mod rtc_sdp;
-#[path = "../../../../src/stats.rs"]
+#[path = "../../src/stats.rs"]
 mod stats;
 use serde_json::{Value, json};
 use std::io::{self, BufRead};

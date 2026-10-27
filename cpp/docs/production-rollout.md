@@ -1,5 +1,9 @@
 # Authorized production rollout and Rust rollback
 
+**Historical rollout record:** the later [Rust archival/retirement request](rust-archive.md)
+supersedes retention policy; do not infer current Rust availability from the
+initial deployment state below.
+
 The original C++20 [development acceptance](acceptance-audit.md) was completed
 before fulfilling the user's subsequent conditional merge/production request.
 The feature branch was merged to main in `63cd522e6afada0f0ca3bd7b45e9d21c0ced4e45`.

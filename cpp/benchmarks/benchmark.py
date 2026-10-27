@@ -212,7 +212,7 @@ if __name__ == "__main__":
         binaries={label: dict(path=str(binary.resolve()), sha256=sha256(binary)) for label,binary in [("rust",args.rust),("cpp",args.cpp)]}, rows=[])
     inputs = [Path(__file__).resolve(), Path(__file__).with_name("workload.lua"),
               Path(__file__).with_name("core_benchmark.cpp"),
-              Path(__file__).resolve().parents[1] / "tests/rust-oracle/src/bin/core_benchmark.rs"]
+              Path(__file__).resolve().parents[2] / "archive/rust/oracle/src/bin/core_benchmark.rs"]
     report["driver_source_sha256"] = {str(path): sha256(path) for path in inputs}
     try:
         if args.mode == "core":

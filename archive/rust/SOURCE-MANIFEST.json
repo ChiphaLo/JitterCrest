@@ -1,0 +1,642 @@
+{
+  "source_commit": "b8e7ae25c94abf12b6584d9b276c4c0192083b32",
+  "scope": "Sanitized Rust reference source preserved byte-for-byte; optional oracle path adapters are separate",
+  "files": [
+    {
+      "original_path": "src/client_info.rs",
+      "archive_path": "archive/rust/src/client_info.rs",
+      "sha256": "38b9fd8788027b6464599313b528294cb6a17053d80969642e20e0f3fd6a487d",
+      "bytes": 10775
+    },
+    {
+      "original_path": "src/config.rs",
+      "archive_path": "archive/rust/src/config.rs",
+      "sha256": "10ac462b082d5c9f3221fc408f5b8247cfcdd2635febe400a496efb7d8c0e299",
+      "bytes": 10270
+    },
+    {
+      "original_path": "src/http_timer.rs",
+      "archive_path": "archive/rust/src/http_timer.rs",
+      "sha256": "87b63457af58cbc0e894f71b3a6cc9dc119aa742f933a0c4f91d134955c1b121",
+      "bytes": 2435
+    },
+    {
+      "original_path": "src/lib.rs",
+      "archive_path": "archive/rust/src/lib.rs",
+      "sha256": "c8ffb843275244fd0ac969722088510bce54c1d5d642930be1c42954f1ab5c4b",
+      "bytes": 71
+    },
+    {
+      "original_path": "src/limits.rs",
+      "archive_path": "archive/rust/src/limits.rs",
+      "sha256": "8d6cdb2f1fd75f157c180bb630a124eae808fa66be7cd10d2b3a17cee9d3b487",
+      "bytes": 10467
+    },
+    {
+      "original_path": "src/main.rs",
+      "archive_path": "archive/rust/src/main.rs",
+      "sha256": "8170e746180645c8b0608405f348e436e3bbcfed92f5be68121d483979f6725a",
+      "bytes": 14470
+    },
+    {
+      "original_path": "src/protocol.rs",
+      "archive_path": "archive/rust/src/protocol.rs",
+      "sha256": "85363e176cf6dbd0704c75d84baec92fef765d720347cc7e4f808bee0a355f68",
+      "bytes": 2489
+    },
+    {
+      "original_path": "src/rate.rs",
+      "archive_path": "archive/rust/src/rate.rs",
+      "sha256": "5543bca4a7de4ca7874c54e5f5fb2bc0a769739cbdfc4f5ce29ff37eb8e4d399",
+      "bytes": 4640
+    },
+    {
+      "original_path": "src/rtc.rs",
+      "archive_path": "archive/rust/src/rtc.rs",
+      "sha256": "2066e9adc8a10ddb0c8e583f70ab2c31c6183c2c135cd1a5ace9b2fe4107f6ee",
+      "bytes": 50724
+    },
+    {
+      "original_path": "src/rtc_control.rs",
+      "archive_path": "archive/rust/src/rtc_control.rs",
+      "sha256": "981667fc43bb5c2686bd4878c6f369a0c88b2db74613542f2e66f9dc9ca14c2b",
+      "bytes": 9011
+    },
+    {
+      "original_path": "src/rtc_sdp.rs",
+      "archive_path": "archive/rust/src/rtc_sdp.rs",
+      "sha256": "e68b28952be214e6f6b05f87a203504fbca617c16e3c3d07e8eb6275e1a28fa1",
+      "bytes": 8649
+    },
+    {
+      "original_path": "src/stats.rs",
+      "archive_path": "archive/rust/src/stats.rs",
+      "sha256": "e01d709131be047e434aa5c5e863f96e0f9c7ffd056cdab87a99833389a238cb",
+      "bytes": 1808
+    },
+    {
+      "original_path": "src/transport.rs",
+      "archive_path": "archive/rust/src/transport.rs",
+      "sha256": "771e1cb26c6857c2431b532d8f3d41872e250a3273512ed00b697f5c3f4a981d",
+      "bytes": 19531
+    },
+    {
+      "original_path": "src/upload_progress.rs",
+      "archive_path": "archive/rust/src/upload_progress.rs",
+      "sha256": "d1fd15bb36ac0fb5587eccabe15dd7ae3752a58b4213dc4baed5d5184e49346f",
+      "bytes": 12042
+    },
+    {
+      "original_path": "src/web.rs",
+      "archive_path": "archive/rust/src/web.rs",
+      "sha256": "3861fd4d73aa219c97ebda33b80184ecbf57672102eeb1477ed8b03374190953",
+      "bytes": 38316
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/CHANGELOG.md",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/CHANGELOG.md",
+      "sha256": "db5f3b69a3dc0df1cad94a328bff69e0e22e36bc9c317e45ad990eafff7ec922",
+      "bytes": 2274
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/Cargo.lock",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/Cargo.lock",
+      "sha256": "a233b800dcd0fe1b92cdbaa0a0329980427181778e44ff578c6480b2e6eee7aa",
+      "bytes": 25887
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/Cargo.toml",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/Cargo.toml",
+      "sha256": "2a3423a3fd06190e23d2cf4a0d8901c5800798cb0306a6855715145aee7423fd",
+      "bytes": 2062
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/Cargo.toml.orig",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/Cargo.toml.orig",
+      "sha256": "ee50e911498c1ac55ea1b815842f6cdf3bbd226b6ece35c6ba237bdaacf3e251",
+      "bytes": 1031
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/LICENSE-APACHE",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "bytes": 10847
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/LICENSE-MIT",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/LICENSE-MIT",
+      "sha256": "56cc6c08157f4faf70d351b3a7ceac143399d5359a78c180e06dcd0390784f4d",
+      "bytes": 1066
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/README.md",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/README.md",
+      "sha256": "11fe7f34490f97f00e030d1024409e3041a8bd0e88f385e3cd364aede5a47252",
+      "bytes": 1246
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/doc/webrtc.rs.png",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/doc/webrtc.rs.png",
+      "sha256": "a83b1467436a2acac0e4055f24bca4dd8a58371101ed189a0481e31b8eaaeff7",
+      "bytes": 33276
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/examples/ping.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/examples/ping.rs",
+      "sha256": "83552df34de7e2b245ccc786dc7afc8cf29f9af80d9f901723c321198c8bccb3",
+      "bytes": 3570
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/examples/pong.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/examples/pong.rs",
+      "sha256": "adcfb215ac5821c26fd6774363ce6384198ab9335af736730e9233a2fa9977b6",
+      "bytes": 3407
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/examples/throughput.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/examples/throughput.rs",
+      "sha256": "053f42dcd8572dd1b822d32e5c8d6a1be3b3c52dca21cb0deb9908fcbd06d9ba",
+      "bytes": 5296
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/association/association_internal.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/association/association_internal.rs",
+      "sha256": "f041d99c388519968629b90580ea12a8701d2bb6f3f1c0ca3162ebc5e3004dc7",
+      "bytes": 97001
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/association/association_internal/association_internal_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/association/association_internal/association_internal_test.rs",
+      "sha256": "cd0375c9f5882838df8de3cdeb500542c18d74399f6e173370a204d7a5de5f68",
+      "bytes": 26096
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/association/association_stats.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/association/association_stats.rs",
+      "sha256": "5ae445d6cacff6569c36f07a1926f3dfc79fe46f2d79a129e44ad6cf36cf1b44",
+      "bytes": 1656
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/association/association_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/association/association_test.rs",
+      "sha256": "b9542291bf0733f7d30e94495248baee1b362287243e41c79f09cfa518549aa8",
+      "bytes": 76290
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/association/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/association/mod.rs",
+      "sha256": "2f6a45cfeceff4d6fc8093a9baaa7b136bbf67f406486fe4fc10478c171ae9f9",
+      "bytes": 22006
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_abort.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_abort.rs",
+      "sha256": "e2d9f24774f686e7dfc48348c402b90636294db082e0fce0f5e1ae70c50dbeca",
+      "bytes": 3003
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_cookie_ack.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_cookie_ack.rs",
+      "sha256": "2d0447b0be694781cae35bb10cea1267fa00f87f3e928dd16c2c13c1dabe2b9f",
+      "bytes": 1557
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_cookie_echo.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_cookie_echo.rs",
+      "sha256": "8c264dc20eb6597b44087c5ea82100868b67ef1e1500bcfdcada74a79eff2cce",
+      "bytes": 1968
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_error.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_error.rs",
+      "sha256": "dbcf6b5d7ed9634928a4fbe7ee3316c9941714dc4df2212a3401f2bfb9df96ab",
+      "bytes": 3067
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_forward_tsn.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_forward_tsn.rs",
+      "sha256": "718d5cd205c2ef4e1d08ab1668a23f7fdc67b00736b50fdbcde563d0fa9372c7",
+      "bytes": 6379
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_header.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_header.rs",
+      "sha256": "f5829fab062348a38dc3b65dae1a5ae5a06d87236f44b82524dbe26423cb4bc2",
+      "bytes": 3940
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_heartbeat.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_heartbeat.rs",
+      "sha256": "d03f42b3b3e9b12db94d37a236d483372086ab86039643e8cbcc3a94b9c3bb0f",
+      "bytes": 3162
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_heartbeat_ack.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_heartbeat_ack.rs",
+      "sha256": "d095241219dcca901550e46d9a0548533b90b5d9be630bc14440f2259f660a49",
+      "bytes": 4433
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_init.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_init.rs",
+      "sha256": "ab7faa70a4d624cc170219671f57ec676040e9c12a3d26e48cb1e39dcce46b63",
+      "bytes": 12609
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_payload_data.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_payload_data.rs",
+      "sha256": "d9ab0de06d553b294fe409a2935483d7d8b51997d60e2fe35ab980bb0e003727",
+      "bytes": 9508
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_reconfig.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_reconfig.rs",
+      "sha256": "ee762435a456eeaa8333104aa4cbc07894ceb600aa30cff8b2ca8b3e33142a4e",
+      "bytes": 4434
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_selective_ack.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_selective_ack.rs",
+      "sha256": "19d0bf7423edb17052e2621b3df1375af7fa3d897891e127ac158b682bf4620a",
+      "bytes": 6232
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown.rs",
+      "sha256": "c9a19662242d3ca8b7cd113650f0164cd0cdc1c4e626f9e38ec17860da81779f",
+      "bytes": 2185
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown_ack.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown_ack.rs",
+      "sha256": "bad035d518a633d05544397a885ae2348d4acb958dbeb657e0baba255a024c78",
+      "bytes": 1587
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown_complete.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_shutdown_complete.rs",
+      "sha256": "29efb99898211c014f1a863a527c02d80f4dab626617d7ca728d605e5933832c",
+      "bytes": 1637
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_test.rs",
+      "sha256": "9378c0b3c29d5b132d3f64bbf97d76a313c31bc2f0bb827a22c9eee2fb01c086",
+      "bytes": 27117
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_type.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_type.rs",
+      "sha256": "eb8ba60db83bb606b3ba877baebb02498d90e669b9829e95327ca4bb2b66f387",
+      "bytes": 3354
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/chunk_unknown.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/chunk_unknown.rs",
+      "sha256": "efc392a67a62787de9280d7363c6b9d17b044e473ccf99ae3a201e5be7f91769",
+      "bytes": 1268
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/chunk/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/chunk/mod.rs",
+      "sha256": "c71adc6c58ca699aa1547c340f6309b0b6a47b0b2ba26e2917ec39434ad8b66c",
+      "bytes": 1299
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/error.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/error.rs",
+      "sha256": "c8da23311c441d34aba8c32c6ecfd1eac44cf11d2d08eb881feb817d9aa4b294",
+      "bytes": 8738
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/error_cause.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/error_cause.rs",
+      "sha256": "4a60c195458f19ba30f71adae3ebe7ad6e9dc62a0dc84f99fa5e100dcb8b43c5",
+      "bytes": 5612
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/fuzz_artifact_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/fuzz_artifact_test.rs",
+      "sha256": "6d55fddf199cda4ad961c9e953d03cbbc04f77b195ff99baa1cdc4184e94e899",
+      "bytes": 1498
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/lib.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/lib.rs",
+      "sha256": "4eeaeb6919d4107e78ab96d6d34ee2008f82a6cb081c47749f1a9ded1a641215",
+      "bytes": 290
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/packet.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/packet.rs",
+      "sha256": "c7f6048630db3515724f6cf029ac08f07c179946bb4590a90cf12e219c8bd883",
+      "bytes": 13522
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/mod.rs",
+      "sha256": "88f3d6fe48409581ef7d0d715c6dfea81d8a20287b250c540173c349f5278deb",
+      "bytes": 3681
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_chunk_list.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_chunk_list.rs",
+      "sha256": "0329323c9e20afcb81103db66776e0dad154404e1f078621396108b3c146074a",
+      "bytes": 1818
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_forward_tsn_supported.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_forward_tsn_supported.rs",
+      "sha256": "db44ab550f13fc49c034454218774b718e2bcf64b93ea06136ed344e9df62392",
+      "bytes": 1540
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_header.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_header.rs",
+      "sha256": "b44183c8d60c039f8441c3cfa6f09e5d62830d13daa8297bf7fbda04d6df03c1",
+      "bytes": 1565
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_heartbeat_info.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_heartbeat_info.rs",
+      "sha256": "5e9dbf675ba522bfe1b35dc74c842298bea95a96d89a5ef2310523344f81d7f6",
+      "bytes": 1379
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_outgoing_reset_request.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_outgoing_reset_request.rs",
+      "sha256": "8e927603c68dc7ea2443dda1e462deb42d29475e94d389974838c02616b8daf2",
+      "bytes": 5158
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_random.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_random.rs",
+      "sha256": "4a46e25800ff8fa3da8f262c135519255f396836d98a9bf4c59904dfd3fc3162",
+      "bytes": 1263
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_reconfig_response.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_reconfig_response.rs",
+      "sha256": "be48e921d3d2431a10206c418f47c7f68a80563a229cbfc01fa10d484631bf09",
+      "bytes": 4732
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_requested_hmac_algorithm.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_requested_hmac_algorithm.rs",
+      "sha256": "8a094f8c496275cbdcda5ddb942e817ae7cc05f4b05bf8b00edbc15cad483c37",
+      "bytes": 3085
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_state_cookie.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_state_cookie.rs",
+      "sha256": "70a0550e8eeed0597d70877a12a44e10d77dfb45f61359f13c103d5cc5bcfcee",
+      "bytes": 1578
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_supported_extensions.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_supported_extensions.rs",
+      "sha256": "5db9a2d2dd30f1782c9e6adc45be83cea7d8b2774f642ec889ea4319348254ac",
+      "bytes": 1748
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_test.rs",
+      "sha256": "5f65690b3c987aed3fb52f04515c63c72c787e8b83c13f91f61155720865a458",
+      "bytes": 7851
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_type.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_type.rs",
+      "sha256": "45552402dd13023e1d616aeecdc270920adbf22611e7d068ee8a4f4966f6812d",
+      "bytes": 6380
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_unknown.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_unknown.rs",
+      "sha256": "48d5cc83d3f084cb95021d660a4c46098269533d71f9e19787e2a644ae6a98ba",
+      "bytes": 1865
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/param/param_unrecognized.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/param/param_unrecognized.rs",
+      "sha256": "733dfdc10a6d6e79bde886c58957a8e7504206f85cff6f02ff81b799c3477bdb",
+      "bytes": 1872
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/control_queue.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/control_queue.rs",
+      "sha256": "fd378cdb12156ef762857b6ff0daff841bb28488ae05e4f9b21ab5c53babdcfd",
+      "bytes": 128
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/mod.rs",
+      "sha256": "8f243e46e28878be57cdfb19fdcf78bfe6519665f8963926b7fccff9da9ad870",
+      "bytes": 153
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/payload_queue.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/payload_queue.rs",
+      "sha256": "b618027d12e5d55aaa4cba5ba4a65a8b6517c190beea422b11da8adff291804d",
+      "bytes": 5624
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/pending_queue.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/pending_queue.rs",
+      "sha256": "7d71ec3e5a947a4c053d110e195ba8eaa7f50355c14409b2a63c9cb7c1319bee",
+      "bytes": 9425
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/queue_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/queue_test.rs",
+      "sha256": "42aa139e2430116605113ee76699a5c7e822ecfbded18948a94316655f2b20b7",
+      "bytes": 30738
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/queue/reassembly_queue.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/queue/reassembly_queue.rs",
+      "sha256": "0aa0b27f75b95b061c6f9dd76cb3120fe2503aa3764c7b84113142fb12e9fb40",
+      "bytes": 10714
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/stream/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/stream/mod.rs",
+      "sha256": "82539377fedfb1aae68dd844e30411e9188d5b09d940df2ba3582ce66e59478b",
+      "bytes": 31135
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/stream/stream_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/stream/stream_test.rs",
+      "sha256": "7adf852d5210bf4968c4bd42f1cb7c53dbb97d2cfe46289c0aaadacb2dfddf27",
+      "bytes": 7380
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/timer/ack_timer.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/timer/ack_timer.rs",
+      "sha256": "86459579bc5b845242a01939b69d7b0039ece7fdd31031399ce70c09ac1b8035",
+      "bytes": 2265
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/timer/mod.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/timer/mod.rs",
+      "sha256": "acd4b084810bcaa03f66ff984a67ab1d8752d76c23cc527169e37b05447aa6ea",
+      "bytes": 82
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/timer/rtx_timer.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/timer/rtx_timer.rs",
+      "sha256": "2f38fe9d530d239652f07b7bf405eb97dda1466a2cae8537bf0fc08f97fd4e0a",
+      "bytes": 6837
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/timer/timer_test.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/timer/timer_test.rs",
+      "sha256": "534de222d7078833a5947afc7a2d5216fc95a16adb5568cc6c20bedc3ebe5afa",
+      "bytes": 16366
+    },
+    {
+      "original_path": "vendor/webrtc-sctp-0.17.1/src/util.rs",
+      "archive_path": "archive/rust/vendor/webrtc-sctp-0.17.1/src/util.rs",
+      "sha256": "61cab42f3c743765b1918c1d384f3608d0b241fff2e8d96e8680bd2b78d3c10e",
+      "bytes": 7702
+    },
+    {
+      "original_path": "tests/browser_central_ui.py",
+      "archive_path": "archive/rust/tests/browser_central_ui.py",
+      "sha256": "f3af9420c2521ef0260ad3556e2fc3714f3465a09143e81ebd53cbf473b8d089",
+      "bytes": 11510
+    },
+    {
+      "original_path": "tests/browser_speed_charts.py",
+      "archive_path": "archive/rust/tests/browser_speed_charts.py",
+      "sha256": "ac1133d7f85c9bddc2a34025f5ef993198f5a019d6ac5aeb3969d3c0c9807185",
+      "bytes": 13508
+    },
+    {
+      "original_path": "tests/chart_render_math.py",
+      "archive_path": "archive/rust/tests/chart_render_math.py",
+      "sha256": "80f0814611cf6e817ee5b0125acbaa59b7570d317a421726da0f5d827a5fd067",
+      "bytes": 1755
+    },
+    {
+      "original_path": "tests/frontend.rs",
+      "archive_path": "archive/rust/tests/frontend.rs",
+      "sha256": "3b12d5466e500c3eefe248d11bc553d7e4750966882c90290a9be05ab8c6f5fc",
+      "bytes": 17679
+    },
+    {
+      "original_path": "tests/rtt_percentile_plot.py",
+      "archive_path": "archive/rust/tests/rtt_percentile_plot.py",
+      "sha256": "84c6dd5fba754619b893aa41b14747e59047f345dc65189f61748d3a9be9a807",
+      "bytes": 5059
+    },
+    {
+      "original_path": "tests/stability_analysis.py",
+      "archive_path": "archive/rust/tests/stability_analysis.py",
+      "sha256": "1da1a3d556708b67e42a9c2ec2e05bf6ff95c49af66e062b30b638b250718ce8",
+      "bytes": 6346
+    },
+    {
+      "original_path": "tests/throughput_worker.py",
+      "archive_path": "archive/rust/tests/throughput_worker.py",
+      "sha256": "e646b6bb4dd10500b0ed8cef14e91090fa469e0b4d60a62a86c5d629ceaf6ad7",
+      "bytes": 10080
+    },
+    {
+      "original_path": "examples/sdp_contract.rs",
+      "archive_path": "archive/rust/examples/sdp_contract.rs",
+      "sha256": "88236d7b4c79af7f23471bb255dfa2430caff9b621a3c84bc0939ee8a482f357",
+      "bytes": 1249
+    },
+    {
+      "original_path": "deploy/Caddyfile.agent.example",
+      "archive_path": "archive/rust/deploy/Caddyfile.agent.example",
+      "sha256": "3d5ebbe9ecdf2f0a5d3ebcd688440fcb520f30e15ecae7e9520c7eadff18abd8",
+      "bytes": 938
+    },
+    {
+      "original_path": "deploy/Caddyfile.example",
+      "archive_path": "archive/rust/deploy/Caddyfile.example",
+      "sha256": "7f1eb70e9df9f1f46aabd22ff41a59283e8081de7af8e771cf8baf10c78e547f",
+      "bytes": 591
+    },
+    {
+      "original_path": "deploy/multi-node.md",
+      "archive_path": "archive/rust/deploy/multi-node.md",
+      "sha256": "879d8f6864f834242f5d109d8cea0c76cab0982a8415d8263ae8eb3c5131bbb4",
+      "bytes": 7450
+    },
+    {
+      "original_path": "deploy/speedtest-rust.service",
+      "archive_path": "archive/rust/deploy/speedtest-rust.service",
+      "sha256": "6a2b394a5513cda8c0b03269e86c21ae024d53c8d7723d00b2ac7af6f2a9a343",
+      "bytes": 812
+    },
+    {
+      "original_path": "Cargo.toml",
+      "archive_path": "archive/rust/Cargo.toml",
+      "sha256": "fefc70fb6d3c1cfbc2a8cf3f549f16c4765207f2c76432f58232f7bbf9a3ad25",
+      "bytes": 1798
+    },
+    {
+      "original_path": "Cargo.lock",
+      "archive_path": "archive/rust/Cargo.lock",
+      "sha256": "a8d5d918ab6110eb2add7a8cf62ec292270285bf1e89a797eb1cbfdb52da0ab0",
+      "bytes": 76738
+    },
+    {
+      "original_path": "README.md",
+      "archive_path": "archive/rust/README.md",
+      "sha256": "0b5a382cbc24f67c0513d3c0e511bdeaf6bbefba065c418fe462821b14bc8bef",
+      "bytes": 16515
+    },
+    {
+      "original_path": ".env.example",
+      "archive_path": "archive/rust/.env.example",
+      "sha256": "1ee2e7a9961f9e640dd57fca5f9287999cd20b8e5de2996979b3f370984fb4a2",
+      "bytes": 436
+    },
+    {
+      "original_path": ".gitignore",
+      "archive_path": "archive/rust/.gitignore",
+      "sha256": "0463ec8d494337cc9b1d1f7956750e5f2e6e9f99d2e4a8cb3cb01729ad0c2c1f",
+      "bytes": 116
+    },
+    {
+      "original_path": "LICENSE",
+      "archive_path": "archive/rust/LICENSE",
+      "sha256": "650322acf9dc00cd7ba33305f19237b681a50cb74487261f5f92b44debc5db7a",
+      "bytes": 1065
+    },
+    {
+      "original_path": "SECURITY.md",
+      "archive_path": "archive/rust/SECURITY.md",
+      "sha256": "7fe155f0944d27f2470d8be5378bef5770116101165c297429df5ef27420be19",
+      "bytes": 2310
+    },
+    {
+      "original_path": "THIRD_PARTY.md",
+      "archive_path": "archive/rust/THIRD_PARTY.md",
+      "sha256": "ffbd76e53043e6d0b7993b7a471b002d06be9cb7cd8a70b5bae579b22cc893b3",
+      "bytes": 1092
+    },
+    {
+      "original_path": "public/index.html",
+      "archive_path": "archive/rust/public/index.html",
+      "sha256": "6f973a961bad29450dc32a9193d7bde7b5269eeee2028e6385dbdb3e61ea93e4",
+      "bytes": 314766
+    },
+    {
+      "original_path": "public/favicon.svg",
+      "archive_path": "archive/rust/public/favicon.svg",
+      "sha256": "25bc06e7f37c29f6b023ff7da42eb661e402b74d2a648209095938680c4cef6b",
+      "bytes": 539
+    },
+    {
+      "original_path": ".github/workflows/ci.yml",
+      "archive_path": "archive/rust/.github/workflows/ci.yml",
+      "sha256": "79317c96a78f8fb7c74de4cbba3c094874d9d87b3607ff5906838f64af214294",
+      "bytes": 725
+    }
+  ]
+}

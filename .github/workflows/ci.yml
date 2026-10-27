@@ -1,19 +1,40 @@
-name: Rust
+name: C++20
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        web_ui: ['ON', 'OFF']
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.96.0
+      - name: Install C++ dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 lld-18 cmake ninja-build libboost-system1.83-dev libssl-dev libcurl4-openssl-dev nlohmann-json3-dev python3
+      - uses: actions/cache@v4
         with:
-          components: rustfmt, clippy
-      - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-      - run: cargo test --workspace --all-features --locked
-      - run: cargo build --release --locked
-      - run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
-      - run: cargo test --workspace --no-default-features --locked
-      - run: cargo build --release --no-default-features --locked
+          path: ${{ runner.temp }}/speedtest-native
+          key: native-ubuntu24-clang18-${{ hashFiles('cpp/cmake/bootstrap-datachannel.sh', 'cpp/cmake/patches/*.patch') }}
+      - name: Bootstrap pinned native transport
+        env:
+          CC: clang-18
+          CXX: clang++-18
+        run: bash cpp/cmake/bootstrap-datachannel.sh "$RUNNER_TEMP/speedtest-native"
+      - name: Configure C++ only
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=clang++-18
+          -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/speedtest-native/install"
+          -DSPEEDTEST_WEB_UI=${{ matrix.web_ui }}
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - name: Python tooling regression tests
+        run: |
+          python3 cpp/tests/release_package_test.py
+          python3 cpp/tests/test_staging_capacity.py
+          python3 cpp/tests/benchmark_report_test.py
+          python3 cpp/benchmarks/network_benchmark_test.py

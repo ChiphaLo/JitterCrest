@@ -1,7 +1,7 @@
 // Test-only native-core driver. These remain the unmodified reference modules.
-#[path = "../../../../../src/protocol.rs"]
+#[path = "../../../src/protocol.rs"]
 mod protocol;
-#[path = "../../../../../src/stats.rs"]
+#[path = "../../../src/stats.rs"]
 mod stats;
 use serde_json::{Value, json};
 use std::io::{self, Read};

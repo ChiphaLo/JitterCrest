@@ -66,8 +66,8 @@ ctest --test-dir cpp/build/bench --output-on-failure
 
 # The existing reference Cargo release profile already enables thin LTO.
 # Use an isolated target directory if preserving previous build artifacts.
-cargo build --release --locked
-cargo build --release --locked --manifest-path cpp/tests/rust-oracle/Cargo.toml \
+cargo build --release --locked --manifest-path archive/rust/Cargo.toml
+cargo build --release --locked --manifest-path archive/rust/oracle/Cargo.toml \
   --bin core_benchmark --bin speedtest-rust-oracle
 ```
 

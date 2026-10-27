@@ -1,0 +1,19 @@
+name: Rust
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo build --release --locked
+      - run: cargo clippy --workspace --all-targets --no-default-features --locked -- -D warnings
+      - run: cargo test --workspace --no-default-features --locked
+      - run: cargo build --release --no-default-features --locked

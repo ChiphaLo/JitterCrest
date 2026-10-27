@@ -1,39 +1,30 @@
 # Security
 
-Never commit `.env` files, SSH passwords/keys, access tokens, deployment snapshots,
-full sensitive headers, packet captures or production logs. Keep credentials
-outside the repository and pass only the configuration needed by the service.
+Only the C++20 backend under `cpp/` is maintained. Implementations under
+`archive/rust/` and `archive/node/` are frozen historical references, excluded
+from the active build and CI. Do not expose archived services to untrusted
+traffic merely because their source is available.
 
-The published source uses generic node identifiers and reserved documentation
-addresses, with a same-origin local default. Keep real deployment configurations
-private. An anonymized source tree is not a substitute for reviewing every Git
-commit and CI log before publication. History rewriting cannot revoke previously
-downloaded copies or guarantee removal from hosting caches and forks.
+Never commit credentials, `.env` secrets, SSH keys, tokens, full sensitive
+headers, deployment snapshots, packet captures, production logs or backups.
+Published defaults use generic identifiers/reserved addresses; review each Git
+commit and CI log. History cannot revoke previously downloaded secrets.
 
-Use an unprivileged service, loopback HTTP behind a correctly configured reverse
-proxy, normal TLS verification, bounded resource limits and a known-good rollback.
-Trust proxy headers only from explicitly trusted proxy IPs. Never expose a
-public listener while trusting arbitrary forwarded identity headers.
+Use a non-root service, loopback HTTP behind verified TLS, explicit allowed
+origins/trusted proxy IPs, bounded peers/requests/bytes/queues and resource limits.
+Never trust arbitrary forwarded identities on a public listener. WebRTC requires
+validated public UDP/NAT/firewall settings and remote SDP filtering. Private-RTC
+flags are for isolated tests only.
 
-WebRTC uses direct UDP. Validate public address/NAT/firewall configuration and
-SDP filtering. The private-RTC test flag is for isolated tests only.
+Keep the pinned C/C++ dependencies and explicit native patches under review.
+Repeat the separate ASan+UBSan and TSan suites after affected changes; do not mix
+incompatible sanitizers or suppress findings to obtain a green report. Current
+finite safety evidence and two explicitly triaged Clang18/Boost coroutine-model
+findings are recorded in `cpp/docs/acceptance-audit.md` and
+`cpp/docs/coroutine-analysis.md`, not represented as proof of zero risk.
 
-For suspected vulnerabilities, use GitHub private vulnerability reporting when
-available or contact the repository owner without posting secrets or exploitable
-production details in a public issue. Run `cargo audit` against a fresh advisory
-database. A clean scan is not a security guarantee; yanked-version warnings and
-other dependency lifecycle changes should also be reviewed.
-
-## Archived Node reference
-
-The old Node/Werift A-B source lives only under `archive/node/`, outside the active
-Rust build and CI. Installed npm dependencies are not committed; private recovery
-ZIPs retain them. This baseline must not be exposed to untrusted production traffic. At its original
-publication, `npm audit` reported three high-severity dependency entries (`ip`,
-`werift-ice`, `werift`) originating from `ip`'s improper public-address
-classification advisory. Archiving this baseline does not fix those dependencies;
-use it only in isolated compatibility/recovery tests.
-
-The Rust lockfile updates rustls to 0.23.46, fixing RUSTSEC-2026-0346 through
-RUSTSEC-2026-0349. A `yoke-derive 0.8.3` yanked-version warning remains a dependency
-lifecycle item, not a clean bill of security or an ignored vulnerability report.
+For vulnerabilities use GitHub private vulnerability reporting where available,
+or contact the owner without publicly posting secrets/exploitable operational
+information. Review fresh advisories for active dependencies and every archived
+component before any deliberate historical rebuild. Original Rust/Node advisory
+notes remain in their archives; those notes are not current clean-scan claims.

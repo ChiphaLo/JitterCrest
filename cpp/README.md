@@ -1,7 +1,7 @@
 # Independent C++20 Speedtest backend
 
-Complete independent C++20 HTTP/WebRTC backend alongside the preserved Rust
-implementation. Runtime never invokes Rust, Node or Python; Rust is used only as
+The sole maintained backend is C++20 HTTP/WebRTC. The frozen Rust reference is
+in [`archive/rust/`](../archive/rust/ARCHIVE.md), outside active build and CI. Runtime never invokes Rust, Node or Python; Rust is used only as
 the development compatibility oracle. UI and no-UI agents compile separately.
 
 The [final objective audit](docs/acceptance-audit.md) maps all15 original sections
@@ -140,15 +140,15 @@ See the RTC validation report for scope and reasons. CMake does not fetch source
 
 ### Original Rust differential oracle
 
-The optional test-only oracle compiles the original Rust pure modules **by path**;
+The archived optional test-only oracle compiles the archived Rust pure modules **by path**;
 it does not copy their implementation or alter them. The C++ library/service
 never invokes or links the oracle. Its JSON/base64/entropy versions are pinned
 to the reference Cargo.lock rather than upgraded opportunistically.
 
 ```sh
-cargo build --release --locked --manifest-path cpp/tests/rust-oracle/Cargo.toml
+cargo build --release --locked --manifest-path archive/rust/oracle/Cargo.toml
 python3 cpp/tests/differential.py \
-  --rust cpp/tests/rust-oracle/target/release/speedtest-rust-oracle \
+  --rust archive/rust/oracle/target/release/speedtest-rust-oracle \
   --cpp cpp/build/speedtest-core-fixture --output core-differential.json
 ```
 

@@ -1,17 +1,26 @@
 # Third-party notices
 
-The local `vendor/webrtc-sctp-0.17.1` crate derives from webrtc-rs and remains
-dual-licensed under its upstream MIT OR Apache-2.0 terms. Original copyright
-notices and both license files are retained in that directory.
+## Active C++20 implementation
 
-Service-specific changes cover bundled FORWARD-TSN parsing and compatibility with
-the sender (fast-recovery state, T3 recovery reset and restartable miss indicators). Zero-retry DATA now follows
-the negotiated budget: the old reliable-zero compatibility behavior was removed.
-These are not represented as a general-purpose SCTP standards update. Most deterministic tests pass, but two
-upstream vendor tests require external fuzz-artifact files not present in this
-source snapshot; the normal workspace unit suite excludes that vendor crate.
+The backend uses Boost (BSL-1.0), nlohmann-json (MIT), OpenSSL (Apache-2.0),
+libcurl (curl license), libdatachannel (MPL-2.0), libjuice (MPL-2.0), usrsctp
+(BSD-3-Clause) and plog (MIT). Keep upstream copyright/license notices when
+redistributing dependencies or bundled binaries. Python/CMake are build/test
+utilities, not server runtime subprocesses.
 
-Rust dependencies remain governed by their respective licenses. `Cargo.lock`
-records exact versions. The old Node/Werift reference and its npm dependencies
-are no longer part of this active source distribution. Any separately retained
-historical recovery archive must keep its original third-party notices.
+`cpp/cmake/bootstrap-datachannel.sh` pins the native transport source and its
+submodules and applies explicit versioned patches from `cpp/cmake/patches/`.
+CMake creates a reviewed Boost header overlay without editing system headers.
+Source modifications, dependency versions and distribution obligations are
+explained in `cpp/README.md`; binary packaging retains dependency notices.
+
+## Historical references
+
+Rust's original notices remain in [`archive/rust/THIRD_PARTY.md`](archive/rust/THIRD_PARTY.md).
+Its vendored `archive/rust/vendor/webrtc-sctp-0.17.1/` retains MIT/Apache-2.0
+licenses and original copyright. The archived Cargo lockfile records the frozen
+Rust dependency set. Optional comparison tooling is also under `archive/rust/`.
+
+The old Node source remains under `archive/node/` with its original lockfile.
+No npm installations, binary recovery archives or operational backups are
+published. Archiving does not remove upstream licensing or security obligations.
