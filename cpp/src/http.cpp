@@ -754,6 +754,8 @@ awaitable<void> Session::route() {
         start_drain();
     if (probe_only() && speed_path(path_)) {
         co_await send(response(404, "not found", "text/plain; charset=utf-8"));
+        if (consumes && !parser_->is_done() && !close_response_)
+            start_drain();
         co_return;
     }
     if (speed_path(path_) &&

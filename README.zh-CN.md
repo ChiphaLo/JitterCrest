@@ -16,6 +16,39 @@ JitterCrest 是一个自托管的浏览器测速与网络质量分析项目。C+
 - **自托管与资源边界**：支持受信任代理、来源限制、请求速率、连接数、超时和缓冲等控制，适合放在反向代理之后部署。
 - **无需 Node.js 服务端**：后端运行不依赖 Node.js、Rust 或 Python。浏览器中的 JavaScript 仍负责交互、图表和 WebRTC；Python 主要用于构建辅助、测试和打包。
 
+## 快速搭建（Linux）
+
+向导可生成主端、数据节点或仅探针节点配置。准备下方构建章节所需工具与依赖，
+并使用 Python 3 运行向导和辅助脚本；C++ 服务运行时不依赖 Python。Windows
+请使用 Linux/WSL。输出目录必须是尚不存在的新目录。
+
+1. 在每台后端服务器取得本仓库后运行 `python3 cpp/deploy/quickstart.py`，
+   选择 **2 数据节点**或 **3 仅探针节点**，输入本节点 HTTPS 地址、主网页
+   HTTPS 地址、节点 ID 等信息。仅探针节点必须填写公网 UDP IPv4。原生依赖目录须对构建用户可写；默认
+   `/opt` 路径可能需要管理员预先设置。
+2. 进入生成目录，运行 `./build.sh --bootstrap` 构建固定版本的原生依赖和
+   服务；已有对应依赖时运行 `./build.sh`。运行 `./run.sh` 前台启动。
+   将生成的 `node.json` 通过安全渠道复制到主端；文件包含节点地址但不含密码。
+3. 在主端运行同一向导，选择 **1 主节点**，按提示导入各后端 `node.json`，
+   然后同样构建和启动。如果主端已由向导生成，可追加节点：
+
+   ```sh
+   python3 cpp/deploy/quickstart.py --existing /path/to/main --add-node /path/to/node.json
+   ```
+
+   修改前会备份 `runtime.env` 并原子替换；手动更改过的非标准配置会被拒绝。
+   添加后须手动重启主端进程或服务，无需重新编译。
+
+请检查 `Caddyfile.example`，自行配置可信 HTTPS 反向代理及防火墙；向导不会
+安装或修改 Caddy、申请证书、开放端口或远程部署。IP HTTPS 需要浏览器信任的
+IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各后端，主端和
+后端之间不建立常驻控制连接。
+
+向导还生成可选的 `service.example` 和 `install-service.sh`。运行
+`sudo ./install-service.sh` 前应先检查内容，创建所选非 root 用户，并保证该用户
+可穿越、读取输出目录且可执行脚本和二进制文件。安装器不会覆盖已有同名服务。
+非交互 JSON 参数可查阅 `python3 cpp/deploy/quickstart.py --help`。
+
 ## 工作方式
 
     主节点：网页 + C++ 服务

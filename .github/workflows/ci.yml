@@ -34,6 +34,7 @@ jobs:
       - run: ctest --test-dir build --output-on-failure
       - name: Python tooling regression tests
         run: |
+          python3 cpp/tests/test_quickstart.py
           python3 cpp/tests/release_package_test.py
           python3 cpp/tests/test_staging_capacity.py
           python3 cpp/tests/benchmark_report_test.py

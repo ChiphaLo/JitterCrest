@@ -52,6 +52,57 @@ is retained as a configuration key only; no Rust process is called. Without it,
 RTC requests fail closed503. `.env.example` is an environment-variable reference;
 the executable does not automatically load dotenv files.
 
+## Guided setup (Linux)
+
+The interactive wizard generates a new main, data-agent or probe-only setup. It
+requires Python 3 for setup and the build tools and native libraries listed above;
+the running C++ service does not require Python. On Windows use Linux/WSL.
+
+1. On each agent host, obtain this repository and run `python3 cpp/deploy/quickstart.py`.
+   Choose **2** for a data agent or **3** for a probe-only agent; enter its HTTPS
+   origin, the main page HTTPS origin, an ID, and the requested local settings.
+   Probe-only agents require their public UDP IPv4. The output directory must be new.
+   Choose a dependency prefix writable by the build user (the default `/opt` path
+   may require administrator setup).
+2. In the generated directory, run `./build.sh --bootstrap` to build the pinned
+   transport and service, or `./build.sh` to reuse the configured dependency prefix.
+   Run `./run.sh` in the foreground. Transfer the generated `node.json` securely to
+   the main host; it contains public node addressing, not a password.
+3. On the main host, run the same wizard, choose **1**, and import the agent
+   `node.json` files when prompted. Build and run the generated main directory in
+   the same way. To add a node to an existing generated main configuration:
+
+   ```sh
+   python3 cpp/deploy/quickstart.py --existing /path/to/main --add-node /path/to/node.json
+   ```
+
+   A backup of `runtime.env` is created before an atomic update; the wizard
+   refuses non-canonical hand-edited configurations. Restart the main process or
+   service manually to apply the node list; rebuilding is not needed.
+
+Review `Caddyfile.example` and configure a trusted HTTPS reverse proxy and firewall
+separately. The wizard does not install or edit Caddy, obtain certificates, open
+ports, or deploy remotely. IP-based HTTPS requires a suitable trusted IP
+certificate. Verify UDP and ICE connectivity through any NAT. The browser talks
+directly to the agents; there is no persistent main-to-agent control channel.
+
+An optional `service.example` and `install-service.sh` are generated. Before
+running `sudo ./install-service.sh`, review both, create the selected non-root user,
+and ensure it can traverse and read the generated directory and execute its
+scripts and binary. The installer refuses to replace an existing unit. Use
+`python3 cpp/deploy/quickstart.py --help` for non-interactive JSON options. For
+example, save the following as `agent-config.json` on the agent host, then run
+`python3 cpp/deploy/quickstart.py --config agent-config.json --output /path/to/new-agent`:
+
+```json
+{"role":"data", "id":"node-1", "label":"Node 1",
+ "public_origin":"https://node.example.com", "main_origin":"https://main.example.com",
+ "port":32132, "native_prefix":"/opt/jittercrest-deps", "service_user":"jittercrest"}
+```
+
+Replace the example addresses and paths. `service_user` must already exist if
+installing a systemd service; the output parent directory must also exist.
+
 ## Configuration and deployment
 
 Published defaults are generic and use only a same-origin local node. Configure
@@ -76,12 +127,6 @@ Historical benchmarks do not imply C++ is universally faster. Rust led the
 recorded local bulk-throughput cases; C++ had selective lightweight-request and
 high-load-memory advantages. Reports retain their source identities, finite
 test scopes and unsuppressed analyzer-model findings.
-
-## 中文说明
-
-后续仅维护 C++20 版本。Rust 完整源码与依赖已移到 `archive/rust/`，Node 历史
-版本保留在 `archive/node/`；默认构建与 CI 不执行任何归档实现。浏览器端
-JavaScript 仍负责图表及 WebRTC，这不代表后端使用 JavaScript 或 Node。
 
 ## License
 
