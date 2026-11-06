@@ -35,7 +35,27 @@ jobs:
       - name: Python tooling regression tests
         run: |
           python3 cpp/tests/test_quickstart.py
+          python3 cpp/tests/test_enroll_agent.py
           python3 cpp/tests/release_package_test.py
           python3 cpp/tests/test_staging_capacity.py
           python3 cpp/tests/benchmark_report_test.py
           python3 cpp/benchmarks/network_benchmark_test.py
+  enrollment-image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the exact allowlisted agent source bundle
+        run: |
+          python3 - <<'PY'
+          import io, os, runpy, tarfile
+          from pathlib import Path
+          bundle = runpy.run_path('cpp/cmake/embed_assets.py')['agent_bundle'](Path('cpp').resolve())
+          output = Path(os.environ['RUNNER_TEMP']) / 'jittercrest-agent-context'
+          output.mkdir()
+          with tarfile.open(fileobj=io.BytesIO(bundle), mode='r:gz') as source:
+              source.extractall(output, filter='data')
+          PY
+      - name: Build and test the enrolled C++ agent image
+        run: >-
+          docker build -f "$RUNNER_TEMP/jittercrest-agent-context/cpp/deploy/Dockerfile.agent"
+          -t jittercrest-agent-ci "$RUNNER_TEMP/jittercrest-agent-context"

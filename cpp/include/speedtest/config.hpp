@@ -14,6 +14,8 @@ struct Config {
     std::string probe_only_id, probe_only_host;
     std::string csp_compat_origins;
     Json nodes;
+    std::string admin_token, admin_state, public_origin;
+    std::string controller_origin, agent_id, agent_key;
     std::optional<std::string> rtc_udp4;
     std::uint64_t max_upload{};
     std::uint64_t upload_ms{};

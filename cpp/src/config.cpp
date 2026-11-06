@@ -110,6 +110,12 @@ Config Config::from_environment(const Environment &get) {
     Config cfg;
     cfg.host = get("SPEEDTEST_HOST").value_or("127.0.0.1");
     cfg.name = get("SPEEDTEST_NODE_NAME").value_or("speedtest-node");
+    cfg.admin_token = get("SPEEDTEST_ADMIN_TOKEN").value_or("");
+    cfg.admin_state = get("SPEEDTEST_ADMIN_STATE").value_or("");
+    cfg.public_origin = get("SPEEDTEST_PUBLIC_ORIGIN").value_or("");
+    cfg.controller_origin = get("SPEEDTEST_CONTROLLER_ORIGIN").value_or("");
+    cfg.agent_id = get("SPEEDTEST_AGENT_ID").value_or("");
+    cfg.agent_key = get("SPEEDTEST_AGENT_KEY").value_or("");
     cfg.trust_proxy = get("TRUST_PROXY_HEADERS") == "1";
     if (cfg.trust_proxy && (cfg.host.empty() || cfg.host == "0.0.0.0" || cfg.host == "::"))
         throw std::invalid_argument("refusing proxy headers on a public listener");

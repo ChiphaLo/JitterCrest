@@ -20,5 +20,8 @@ namespace assets {
 [[nodiscard]] bool web_ui();
 [[nodiscard]] std::string page();
 [[nodiscard]] std::string_view icon();
+[[nodiscard]] std::string admin_page();
+[[nodiscard]] std::string_view installer();
+[[nodiscard]] std::string_view agent_source();
 } // namespace assets
 } // namespace speedtest

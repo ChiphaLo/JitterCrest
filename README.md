@@ -52,9 +52,54 @@ is retained as a configuration key only; no Rust process is called. Without it,
 RTC requests fail closed503. `.env.example` is an environment-variable reference;
 the executable does not automatically load dotenv files.
 
-## Guided setup (Linux)
+## Node management and command-based enrollment
 
-The interactive wizard generates a new main, data-agent or probe-only setup. It
+The server picker supports search, capability labels and a remembered selection.
+Open **Manage nodes** in the picker to access `/admin` on the main host.
+
+1. Create a **main** setup with `python3 cpp/deploy/quickstart.py`, build/run it and
+   configure its trusted HTTPS entry. The generated `runtime.env` contains a random
+   `SPEEDTEST_ADMIN_TOKEN`, the public origin and a writable registry directory.
+   Read the administrator token locally with `grep '^SPEEDTEST_ADMIN_TOKEN=' runtime.env`.
+2. Log in to `/admin`. Choose **接入节点**, enter an ID, display name, the agent's
+   HTTPS origin, public UDP IPv4 and capability, then generate the install command.
+   The single-use enrollment key expires after **one hour**.
+3. Copy the command to the corresponding Linux VPS. It claims the enrollment,
+   builds/tests a UI-free C++ Docker image from the main server's allowlisted
+   source bundle, starts the agent and Caddy, verifies HTTPS and activates the node.
+   The node then appears in the main page's picker without a main-server restart.
+
+Use a dedicated Linux VPS with Python 3, curl, sudo/root access, free TCP ports
+80/443 and reachable public UDP. If Docker is missing, the installer installs
+`docker.io` with apt on Debian/Ubuntu. Other distributions require an existing
+working Docker installation. Domain names must resolve to the VPS. The installer
+uses Caddy 2.11.9, including an explicit ACME `shortlived` profile for IP addresses;
+certificate issuance, provider HTTPS policy and NAT/firewall access must succeed.
+Existing listeners on the required ports are left untouched and setup stops.
+The first build takes several minutes; native build layers are cached for reuse.
+
+Management supports rename, enable/disable, credential reset and removal. Claimed
+nodes report heartbeats every 30 seconds; missing heartbeats for 90 seconds show
+as offline. Existing configured nodes show as configured until enrolled. Browsers
+exchange measurements directly with agents. Heartbeats only report presence.
+The registry takes its initial node list from `SPEEDTEST_NODES`; after its first
+start, `/admin` is authoritative and updates are saved atomically with mode 0600.
+`--add-node` is available before the registry's first start; use `/admin` afterward.
+
+For an existing main service, set `SPEEDTEST_ADMIN_TOKEN` to a random value of at
+least 32 characters, `SPEEDTEST_PUBLIC_ORIGIN` to its exact HTTPS origin, and
+`SPEEDTEST_ADMIN_STATE` to an absolute writable private directory. A hardened
+systemd unit needs `ReadWritePaths=` for that directory. Without these settings,
+management endpoints are unavailable. See [security](SECURITY.md).
+
+Installer state lives in `/opt/jittercrest-agents/<id>/`; rerun the same command
+to resume an interrupted installation. The backend runs as a non-root user in a
+read-only container. Removing a node revokes its controller credential and removes
+it from the picker; stop its VPS containers separately when retiring the service.
+
+## Manual guided setup (Linux)
+
+The interactive wizard also supports manual main, data-agent or probe-only setups. It
 requires Python 3 for setup and the build tools and native libraries listed above;
 the running C++ service does not require Python. On Windows use Linux/WSL.
 
@@ -70,21 +115,21 @@ the running C++ service does not require Python. On Windows use Linux/WSL.
    the main host; it contains public node addressing, not a password.
 3. On the main host, run the same wizard, choose **1**, and import the agent
    `node.json` files when prompted. Build and run the generated main directory in
-   the same way. To add a node to an existing generated main configuration:
+   the same way. Before starting its registry for the first time, import another node:
 
    ```sh
    python3 cpp/deploy/quickstart.py --existing /path/to/main --add-node /path/to/node.json
    ```
 
    A backup of `runtime.env` is created before an atomic update; the wizard
-   refuses non-canonical hand-edited configurations. Restart the main process or
-   service manually to apply the node list; rebuilding is not needed.
+   refuses non-canonical hand-edited configurations. Once the main registry has
+   started, manage nodes in `/admin`.
 
 Review `Caddyfile.example` and configure a trusted HTTPS reverse proxy and firewall
 separately. The wizard does not install or edit Caddy, obtain certificates, open
 ports, or deploy remotely. IP-based HTTPS requires a suitable trusted IP
 certificate. Verify UDP and ICE connectivity through any NAT. The browser talks
-directly to the agents; there is no persistent main-to-agent control channel.
+directly to the agents. Manually configured agents have no enrollment heartbeat.
 
 An optional `service.example` and `install-service.sh` are generated. Before
 running `sudo ./install-service.sh`, review both, create the selected non-root user,

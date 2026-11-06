@@ -103,6 +103,25 @@
     .elapsed-label { color: var(--cupertino-gray); font-size: 12px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
     .node-select { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .node-select label { color: var(--cupertino-gray); font-size: 12px; font-weight: 600; text-transform: uppercase; }
+    #nodeSelect { min-width: 180px; height: auto; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 18px; text-align: left; background: #eef5ff; color: #1b4e88; }
+    #nodeSelect::after { content: "⌄"; font-size: 18px; }
+    #nodeDialog { border: 1px solid #e0e5ec; border-radius: 20px; width: min(560px, calc(100vw - 28px)); padding: 24px; max-height: 85vh; overflow: auto; color: var(--ink); background: var(--panel); }
+    #nodeDialog::backdrop { background: #1b2b4759; }
+    .node-dialog-head, .node-dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .node-dialog-head h2 { margin: 0; font-size: 21px; }
+    .node-dialog-head button { background: #f0f2f7; color: #5c6676; min-width: 38px; padding: 6px; }
+    #nodeSearch { width: 100%; margin: 20px 0 14px; padding: 12px; border: 1px solid #dce0e7; border-radius: 10px; font: inherit; }
+    #nodeChoices { display: grid; gap: 8px; }
+    .node-choice { width: 100%; height: auto; min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: #263347; border: 1px solid #e8ebf1; border-radius: 12px; background: white; padding: 14px; }
+    .node-choice[aria-pressed="true"] { background: #edf5ff; border-color: #85baff; }
+    .node-choice > span:first-child { min-width: 0; }
+    .node-choice strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+    .node-choice small { display: block; color: #7d8797; font-weight: 400; font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }
+    .node-kind { color: #6081a5; font-size: 11px; white-space: nowrap; border-radius: 20px; padding: 5px 8px; background: #f2f5f9; }
+    .node-dialog-foot { margin-top: 18px; font-size: 12px; color: #7d8797; }
+    .node-dialog-foot a { color: var(--blue); text-decoration: none; }
+    #nodePickerNotice { margin: 8px 0; color: #7d8797; font-size: 12px; }
+    #nodeDialog :focus-visible { outline: 3px solid #93c7ff; outline-offset: 2px; }
     #restartBtn { background: transparent; color: var(--cupertino-blue); border: 1px solid var(--cupertino-blue); border-radius: var(--cupertino-radius-sm); cursor: pointer; font: 600 12px var(--cupertino-font); padding: 2px 10px; line-height: 1.8; transition: opacity 0.15s; }
     #restartBtn:hover { opacity: 0.7; }
     .node-path-notice { color: var(--cupertino-orange); font-size: 11px; font-weight: 600; margin-left: 8px; }
@@ -608,8 +627,7 @@
             <div class="status-copy"><strong id="phase">WebRTC setup</strong><span id="phaseSub">Opening UDP-like unreliable DataChannels.</span><span id="nodePathNotice" class="node-path-notice" aria-live="polite"></span></div>
           </div>
           <div class="node-select">
-            <label for="nodeSelect">Server</label>
-            <select id="nodeSelect"></select>
+            <button id="nodeSelect" type="button" aria-label="Choose server" aria-haspopup="dialog" aria-controls="nodeDialog"></button>
             <button id="restartBtn">Restart</button>
             <span class="elapsed-label">Elapsed</span>
             <span id="elapsed">0.0s</span>
@@ -850,6 +868,13 @@
       </section>
     </section>
   </main>
+  <dialog id="nodeDialog" aria-labelledby="nodeDialogTitle">
+    <div class="node-dialog-head"><h2 id="nodeDialogTitle">Choose server</h2><button id="closeNodeDialog" type="button" aria-label="Close server picker">×</button></div>
+    <input id="nodeSearch" type="search" placeholder="Search name or address" aria-label="Search servers">
+    <div id="nodeChoices" aria-label="Servers"></div>
+    <div id="nodePickerNotice" role="status" aria-live="polite"></div>
+    <div class="node-dialog-foot"><span id="nodeCount"></span><a href="/admin">Manage nodes ↗</a></div>
+  </dialog>
   <script nonce="__CSP_NONCE__">
 (function (root, factory) {
   "use strict";
@@ -1492,7 +1517,10 @@
     })();
     const nodeParam = new URLSearchParams(location.search).get("node")
       || (location.protocol === "http:" && location.hostname === "192.0.2.10" ? "probe-only" : "");
-    let selectedNode = (nodeParam && nodes.find((n) => n.id === nodeParam)) || nodes[0] || { id: "local", label: "Local", base: "" };
+    let savedNode = "";
+    try { savedNode = localStorage.getItem("jittercrest.node") || ""; } catch {}
+    let selectedNode = nodes.find(n => n.id === (nodeParam || savedNode)) || nodes[0];
+    function isProbeOnlyNode() { return selectedNode.probeOnly === true || selectedNode.role === "probe" || selectedNode.id === "probe-only"; }
 
     const state = { points: [], start: 0, timer: null, chartTimer: null, download: null, upload: null, latency: null, loss: null, session: 0, pageInstanceId: randomId(), sessionAttempts: new Set(), sessionCleanupPromise: Promise.resolve(), activePeers: new Set(), speedLocks: 0, speedLocksBySession: new Map(), abortController: null, latestWebRtcRttMs: null, speedDiagnostics: {} };
     const CLIENT_ICE_GATHER_MAX_MS = 50;
@@ -1513,13 +1541,13 @@
     function navigateToProbeOnlyDirectPage() {
       // A secure agent endpoint keeps the only UI on the central host.
       if (typeof selectedNode.base === "string" && selectedNode.base.startsWith("https://")) return false;
-      if (selectedNode.id !== "probe-only" || isProbeOnlyDirectPage()) return false;
+      if (!isProbeOnlyNode() || isProbeOnlyDirectPage()) return false;
       if (new URLSearchParams(location.search).get("testMode") === "local") return false;
       window.location.assign(probeOnlyDirectPageUrl());
       return true;
     }
     function navigateFromProbeOnlyToSharedPage() {
-      if (!isProbeOnlyDirectPage() || selectedNode.id === "probe-only") return false;
+      if (!isProbeOnlyDirectPage() || isProbeOnlyNode()) return false;
       const target = new URL("https://speed.example.com/");
       target.searchParams.set("node", selectedNode.id);
       window.location.assign(target.toString());
@@ -1533,7 +1561,7 @@
       history.replaceState(history.state, "", target.pathname + target.search + target.hash);
     }
     function serviceBase() {
-      if (selectedNode.id === "probe-only" && (isProbeOnlyDirectPage() || new URLSearchParams(location.search).get("testMode") === "local")) {
+      if (isProbeOnlyNode() && (isProbeOnlyDirectPage() || new URLSearchParams(location.search).get("testMode") === "local")) {
         return location.origin.replace(/\/+$/, "") + "/";
       }
       if (selectedNode.base && !selectedNode.base.startsWith("http://") && !selectedNode.base.startsWith("https://")) {
@@ -1574,13 +1602,13 @@
         $("clientKicker").textContent = "Client network";
       }
       if ($("speedTestContainer")) {
-        $("speedTestContainer").style.display = selectedNode.id === "probe-only" ? "none" : "block";
+        $("speedTestContainer").style.display = isProbeOnlyNode() ? "none" : "block";
       }
       const waterfallPanel = $("smallDownload") && $("smallDownload").closest(".panel");
-      if (waterfallPanel) waterfallPanel.style.display = selectedNode.id === "probe-only" ? "none" : "block";
+      if (waterfallPanel) waterfallPanel.style.display = isProbeOnlyNode() ? "none" : "block";
       const pathNotice = $("nodePathNotice");
       if (pathNotice) {
-        pathNotice.textContent = selectedNode.id === "probe-only"
+        pathNotice.textContent = isProbeOnlyNode()
           ? "Direct probe-only node - RTT and Stability only"
           : "";
       }
@@ -1599,7 +1627,7 @@
       $("clientRegion").textContent = "";
       $("clientAsn").textContent = "";
       try {
-        const requestId = selectedNode.id === "probe-only" ? "probe-only-client-info-" + randomId() : "";
+        const requestId = isProbeOnlyNode() ? "probe-only-client-info-" + randomId() : "";
         const res = await fetch(api("/client-info?n=" + (requestId || randomId())), {
           cache: "no-store",
           ...(requestId ? { headers: { "X-Speedtest-Attempt-Id": requestId } } : {}),
@@ -3939,7 +3967,7 @@
     async function webRtcTests(session) {
       if (!isCurrentSession(session)) return;
       setPhase("WebRTC setup", "Opening UDP-like unreliable DataChannels.");
-      const requestId = selectedNode.id === "probe-only" ? "probe-only-latency-" + randomId() : "";
+      const requestId = isProbeOnlyNode() ? "probe-only-latency-" + randomId() : "";
       const latencyResponse = await fetch(api("/latency?n=" + (requestId || randomId())), {
         cache: "no-store",
         ...(requestId ? { headers: { "X-Speedtest-Attempt-Id": requestId } } : {}),
@@ -4950,7 +4978,7 @@
         }
         await webRtcTests(session);
         if (!isCurrentSession(session)) return false;
-        if (selectedNode.id !== "probe-only") {
+        if (!isProbeOnlyNode()) {
           await smallDownloadTest(session);
         }
         if (!isCurrentSession(session)) return false;
@@ -4966,7 +4994,7 @@
       }
     }
     async function run() {
-      if (selectedNode.id === "probe-only") return;
+      if (isProbeOnlyNode()) return;
       if (state.speedLocks > 0) return;
       const session = state.session;
       state.download = null;
@@ -5009,28 +5037,59 @@
         unlockSpeedTest(session);
       }
     }
-    nodes.forEach((node) => {
-      const option = document.createElement("option");
-      option.value = node.id;
-      option.textContent = node.label;
-      if (node.id === selectedNode.id) option.selected = true;
-      $("nodeSelect").appendChild(option);
-    });
-    $("nodeSelect").addEventListener("change", async () => {
-      selectedNode = nodes.find((node) => node.id === $("nodeSelect").value) || nodes[0];
+    let pickerNodes = nodes;
+    function updateNodeButton() {
+      $("nodeSelect").textContent = selectedNode.label;
+      $("nodeSelect").dataset.nodeId = selectedNode.id;
+      $("nodeSelect").setAttribute("aria-label", "Choose server: " + selectedNode.label);
+    }
+    function renderNodeChoices() {
+      const needle = $("nodeSearch").value.trim().toLocaleLowerCase();
+      const visible = pickerNodes.filter(n => [n.label, n.id, n.base].some(v => String(v || "").toLocaleLowerCase().includes(needle)));
+      $("nodeChoices").replaceChildren();
+      $("nodeCount").textContent = pickerNodes.length + (pickerNodes.length === 1 ? " server" : " servers");
+      for (const node of visible) {
+        const button = document.createElement("button"); button.type = "button"; button.className = "node-choice";
+        button.dataset.nodeId = node.id; button.setAttribute("aria-pressed", String(node.id === selectedNode.id));
+        const identity = document.createElement("span"), title = document.createElement("strong"), address = document.createElement("small"), kind = document.createElement("span");
+        title.textContent = node.label; address.textContent = node.base || "This server"; identity.append(title, address);
+        kind.className = "node-kind"; kind.textContent = node.probeOnly || node.role === "probe" || node.id === "probe-only" ? "Probes only" : "Speed + probes";
+        button.append(identity, kind);
+        button.addEventListener("click", () => selectNode(node));
+        $("nodeChoices").append(button);
+      }
+      $("nodePickerNotice").textContent = visible.length ? "" : "No matching servers";
+    }
+    async function selectNode(node) {
+      $("nodeDialog").close();
+      try { localStorage.setItem("jittercrest.node", node.id); } catch {}
+      const original = nodes.find(n => n.id === node.id && n.base === node.base && n.probeOnly === node.probeOnly);
+      if (!original) {
+        const url = new URL(location.href); url.searchParams.set("node", node.id); location.assign(url); return;
+      }
+      if (node.id === selectedNode.id) return;
+      selectedNode = node; updateNodeButton();
       if (navigateToProbeOnlyDirectPage() || navigateFromProbeOnlyToSharedPage()) return;
       syncSelectedNodeUrl();
-      const session = nextSession();
-
-      clientInfoStarted = false;
-      updateEndpoint(session);
+      const session = nextSession(); clientInfoStarted = false; updateEndpoint(session);
+      try { lockSpeedTest(session); await latencyRun(session); }
+      catch (error) { if (isCurrentSession(session)) { setPhase("Error", error.message); log("ERROR " + error.message); } }
+      finally { unlockSpeedTest(session); }
+    }
+    updateNodeButton();
+    syncSelectedNodeUrl();
+    $("nodeSelect").addEventListener("click", async () => {
+      $("nodeSearch").value = ""; renderNodeChoices(); $("nodeDialog").showModal(); $("nodeSearch").focus();
       try {
-        lockSpeedTest(session);
-        await latencyRun(session);
-      } finally {
-        unlockSpeedTest(session);
-      }
+        const response = await fetch(localBase + "/api/nodes", {cache:"no-store", signal:AbortSignal.timeout(4000)});
+        if (response.ok) {
+          const result = await response.json();
+          if (Array.isArray(result.nodes) && result.nodes.length) { pickerNodes = result.nodes; renderNodeChoices(); }
+        }
+      } catch { $("nodePickerNotice").textContent = "Showing the current server list"; }
     });
+    $("closeNodeDialog").addEventListener("click", () => $("nodeDialog").close());
+    $("nodeSearch").addEventListener("input", renderNodeChoices);
     $("run").addEventListener("click", run);
     drawChart();
     drawLatencyPlot([], []);

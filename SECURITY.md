@@ -23,6 +23,35 @@ finite safety evidence and two explicitly triaged Clang18/Boost coroutine-model
 findings are recorded in `cpp/docs/acceptance-audit.md` and
 `cpp/docs/coroutine-analysis.md`, not represented as proof of zero risk.
 
+## Node management and enrollment
+
+Management requires an explicitly configured high-entropy administrator token,
+exact public HTTPS origin and writable private registry directory. Keep the main
+listener on loopback behind trusted TLS. Browser admin calls use a bearer token
+held only in page memory; they do not use cookies or persistent browser storage.
+Cross-origin administrator writes are rejected. Protect the service environment,
+registry directory and backups with operator-only permissions; rotating the admin
+token requires a service restart and logging in again.
+
+Enrollment keys contain 256 random bits, expire after one hour and can be claimed
+once. Only hashes of enrollment keys and agent credentials are persisted on the
+controller. Keep copied commands private: they contain an enrollment key. Agent
+credentials reside in mode-0600 installation files on the VPS and authorize only
+that node's activation and heartbeat. Reset/removal revokes those credentials.
+Disabling a node hides it from the picker while preserving its installation.
+Removing a node does not stop containers or prevent access to its public endpoint;
+retiring the VPS service also requires stopping its containers.
+
+The generated installer requires root and working external network access. It
+builds only the embedded allowlisted agent source, uses strict HTTPS certificate
+verification, and refuses occupied TLS ports or unrelated container names. It
+does not modify the firewall. For Docker installation it uses the distribution's
+apt package on Debian/Ubuntu. Review the command and downloaded installer before
+running them on a VPS; the controller is trusted to distribute executable source.
+The Docker build context excludes environment files, archives, VCS and operator
+records. The C++ runtime runs non-root with a read-only filesystem and no added
+capabilities; Caddy manages certificates in its separate data directory.
+
 For vulnerabilities use GitHub private vulnerability reporting where available,
 or contact the owner without publicly posting secrets/exploitable operational
 information. Review fresh advisories for active dependencies and every archived

@@ -93,13 +93,20 @@ target_compile_options(speedtest-coroutine-lifetime-test PRIVATE -Wall -Wextra -
 add_test(NAME asio_coroutine_runtime_lifetime COMMAND speedtest-coroutine-lifetime-test)
 
 set(SHARED_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/../public" CACHE PATH "Unmodified shared frontend")
+file(GLOB_RECURSE AGENT_SOURCE_INPUTS CONFIGURE_DEPENDS src/*.cpp include/*.hpp tests/*.cpp tests/*.hpp
+  cmake/*.py cmake/*.sh cmake/patches/*.patch)
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"
   COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_assets.py"
     --assets "${SHARED_ASSETS}" --output "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"
+    --backend "${CMAKE_CURRENT_SOURCE_DIR}"
     --web-ui "${SPEEDTEST_WEB_UI}"
   DEPENDS cmake/embed_assets.py "${SHARED_ASSETS}/index.html" "${SHARED_ASSETS}/favicon.svg"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../public/admin.html" deploy/enroll_agent.py deploy/Dockerfile.agent
+    deploy/package_release.py CMakeLists.txt ${AGENT_SOURCE_INPUTS}
+    deploy/speedtest-cpp-staging.service deploy/staging.env.example deploy/Caddyfile.staging.example
+    "${CMAKE_CURRENT_SOURCE_DIR}/../.dockerignore" "${CMAKE_CURRENT_SOURCE_DIR}/../THIRD_PARTY.md"
   VERBATIM)
-add_library(speedtest_http src/client_info.cpp src/http.cpp src/rtc.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
+add_library(speedtest_http src/client_info.cpp src/admin.cpp src/http.cpp src/rtc.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
 target_link_libraries(speedtest_http PUBLIC speedtest_core CURL::libcurl LibDataChannel::LibDataChannel)
 # Boost 1.83's Clang detection predates Clang 18's C++20 coroutine macros.
 target_compile_definitions(speedtest_http PUBLIC BOOST_ASIO_HAS_CO_AWAIT BOOST_ASIO_HAS_STD_COROUTINE)
@@ -113,3 +120,6 @@ endif()
 add_executable(speedtest-client-info-test tests/client_info_test.cpp)
 target_link_libraries(speedtest-client-info-test PRIVATE speedtest_http)
 add_test(NAME bounded_client_info_provider COMMAND speedtest-client-info-test)
+add_executable(speedtest-admin-test tests/admin_test.cpp)
+target_link_libraries(speedtest-admin-test PRIVATE speedtest_http)
+add_test(NAME node_management_enrollment COMMAND speedtest-admin-test)

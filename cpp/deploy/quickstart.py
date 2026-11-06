@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import secrets
 import stat
 import sys
 import tempfile
@@ -110,6 +111,8 @@ def add_node(directory, value):
             env[key] = values[0]
         if env_text(env) != original or "SPEEDTEST_NODES" not in env or env.get("SPEEDTEST_PROBE_ONLY") == "1":
             raise ValueError("expected an unmodified generated main-node runtime.env")
+        if (Path(env.get("SPEEDTEST_ADMIN_STATE", str(folder / "state"))) / "nodes.json").exists():
+            raise ValueError("the node registry is active; manage nodes through /admin")
         nodes = json.loads(env["SPEEDTEST_NODES"])
         if (not isinstance(nodes, list) or not nodes or
                 any(not isinstance(n, dict) or set(n) != {"id", "label", "base"} for n in nodes) or
@@ -225,6 +228,10 @@ def generate(spec, imported, output):
     if not parent.is_dir():
         raise ValueError("output parent directory must already exist")
     q = shlex.quote
+    if setup["role"] == "main":
+        setup["env"].update(SPEEDTEST_ADMIN_TOKEN=secrets.token_urlsafe(32),
+                            SPEEDTEST_ADMIN_STATE=str(out / "state"),
+                            SPEEDTEST_PUBLIC_ORIGIN=setup["public"])
     env = env_text(setup["env"])
     web = "ON" if setup["role"] == "main" else "OFF"
     build = f'''#!/usr/bin/env bash
@@ -275,6 +282,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
+{('ReadWritePaths=' + unit_quote(str(out / 'state'))) if setup['role'] == 'main' else ''}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -325,6 +333,8 @@ echo "Started $UNIT. Review Caddyfile.example separately; this script never chan
              "        flush_interval -1\n"
              "    }\n}\n")
     out.mkdir(mode=0o700)
+    if setup["role"] == "main":
+        (out / "state").mkdir(mode=0o700)
     (out / "runtime.env").write_text(env, encoding="utf-8")
     (out / "runtime.env").chmod(0o600)
     (out / "build.sh").write_text(build, encoding="utf-8")
@@ -404,6 +414,8 @@ def main():
         print(f"可选 systemd：确保 {result['service_user']} 已存在且可读取输出目录，再检查并运行 sudo ./install-service.sh。")
         if result["node"]:
             print("将 node.json 安全复制到主节点，在主节点向导中导入；无需主端主动连接后端。")
+        else:
+            print("后台：" + result["public"] + "/admin；管理令牌见 runtime.env 中的 SPEEDTEST_ADMIN_TOKEN。")
         if not result["udp4"]:
             print("注意：未指定 UDP 公网映射；NAT 环境必须检查 ICE 候选地址与 UDP 连通性。")
         print("请自行配置有效 HTTPS 证书；IP 证书的签发和浏览器信任因提供商而异。")

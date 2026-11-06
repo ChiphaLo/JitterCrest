@@ -1,5 +1,6 @@
 #include "speedtest/http.hpp"
 #include "speedtest/client_info.hpp"
+#include "speedtest/admin.hpp"
 #include "speedtest/progress.hpp"
 #include "speedtest/rtc.hpp"
 #include "speedtest/sdp.hpp"
@@ -183,7 +184,9 @@ bool private_client(std::string_view raw) {
 struct App {
     explicit App(Config value, const asio::any_io_executor &executor)
         : cfg(std::move(value)), limits(cfg), info(std::make_shared<ClientInfo>()),
-          payload(chunk_size), rtc(executor, cfg) {
+          payload(chunk_size), rtc(executor, cfg), admin(cfg), reporter(cfg) {
+        if (!assets::web_ui() && admin.enabled())
+            throw std::invalid_argument("management requires the main UI build");
         if (RAND_bytes(reinterpret_cast<unsigned char *>(payload.data()),
                        static_cast<int>(payload.size())) != 1)
             throw std::runtime_error("download entropy unavailable");
@@ -195,6 +198,8 @@ struct App {
     const Clock::time_point epoch = Clock::now();
     std::vector<char> payload;
     RtcService rtc;
+    NodeAdmin admin;
+    AgentReporter reporter;
     Clock::time_point checked_deadline(Clock::time_point start, std::uint64_t ms) const {
         const auto seconds =
             std::chrono::duration_cast<std::chrono::seconds>(start + Millis(ms) - epoch).count();
@@ -317,6 +322,7 @@ class Session : public std::enable_shared_from_this<Session> {
     awaitable<void> upload(bool streaming);
     awaitable<void> progress();
     awaitable<void> offer();
+    awaitable<void> management();
     awaitable<void> chunk(std::string_view data);
     awaitable<void> chunk_end();
     Response page();
@@ -672,9 +678,10 @@ Response Session::page() {
         return failure(404, "not found");
     const auto &cfg = app_->cfg;
     const auto nonce = random_hex(18);
+    const auto current_nodes = app_->admin.public_nodes();
     std::set<std::string> sources;
-    if (cfg.nodes.is_array())
-        for (const auto &node : cfg.nodes)
+    if (current_nodes.is_array())
+        for (const auto &node : current_nodes)
             for (const auto field : {"base", "directPage", "singleDownloadBase"}) {
                 auto it = node.find(field);
                 if (it == node.end() || !it->is_string())
@@ -714,7 +721,7 @@ Response Session::page() {
         first = false;
         connect += origin;
     }
-    auto nodes = cfg.nodes.dump();
+    auto nodes = current_nodes.dump();
     replace_all(nodes, "<", "\\u003c");
     replace_all(nodes, ">", "\\u003e");
     replace_all(nodes, "&", "\\u0026");
@@ -743,6 +750,12 @@ Response Session::page() {
     return out;
 }
 awaitable<void> Session::route() {
+    if (path_is(path_, "/api/nodes") || path_ == "/admin" || path_ == "/admin/" ||
+        path_.starts_with("/api/admin/") || path_.starts_with("/api/enrollment/") ||
+        path_ == "/enroll/agent.py" || path_ == "/enroll/source.tar.gz") {
+        co_await management();
+        co_return;
+    }
     const auto method = parser_->get().method();
     const auto &fields = parser_->get().base();
     const auto &cfg = app_->cfg;
@@ -802,6 +815,81 @@ awaitable<void> Session::route() {
     // their response. Parsing the next request waits for the owned drainer.
     if (consumes && !parser_->is_done() && !close_response_)
         start_drain();
+}
+awaitable<void> Session::management() {
+    close_response_ = true;
+    const auto method = parser_->get().method();
+    if (!assets::web_ui()) {
+        co_await send(failure(404, "not found"));
+        co_return;
+    }
+    if (!app_->limits.rate(ip_, false)) {
+        co_await send(failure(429, "management request rate limit exceeded"));
+        co_return;
+    }
+    if (path_is(path_, "/api/nodes") && method == http::verb::get) {
+        co_await send(json(Json{{"nodes", app_->admin.public_nodes()}}));
+        co_return;
+    }
+    if (!app_->admin.enabled()) {
+        co_await send(failure(404, "management is not configured"));
+        co_return;
+    }
+    if (method == http::verb::get) {
+        if (path_ == "/admin" || path_ == "/admin/") {
+            const auto nonce = random_hex(18);
+            auto body = assets::admin_page();
+            replace_all(body, "__CSP_NONCE__", nonce);
+            auto out = response(200, std::move(body), "text/html; charset=utf-8", "no-store");
+            out.set("content-security-policy", "default-src 'none'; script-src 'nonce-" + nonce +
+                "'; style-src 'nonce-" + nonce + "'; connect-src 'self'; img-src 'self'; "
+                "base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+            out.set("x-frame-options", "DENY");
+            co_await send(std::move(out));
+            co_return;
+        }
+        if (path_ == "/enroll/agent.py" || path_ == "/enroll/source.tar.gz") {
+            const auto content = path_ == "/enroll/agent.py" ? assets::installer() : assets::agent_source();
+            co_await send(response(200, std::string(content), path_ == "/enroll/agent.py" ?
+                "text/x-python; charset=utf-8" : "application/gzip", "no-store"));
+            co_return;
+        }
+    }
+    if (method != http::verb::get && method != http::verb::post) {
+        co_await send(failure(405, "use GET or POST"));
+        co_return;
+    }
+    if (parser_->content_length().value_or(0) > 16384) {
+        co_await send(failure(413, "management request is too large"));
+        co_return;
+    }
+    arm_read(Clock::now() + Millis(std::min<std::uint64_t>(app_->cfg.http_headers_ms, 10000)), true);
+    std::string raw;
+    std::array<char, 4096> buffer{};
+    if (method == http::verb::post)
+        co_await continue_body();
+    while (!parser_->is_done()) {
+        const auto n = co_await read_body(buffer);
+        if (raw.size() + n > 16384) {
+            co_await send(failure(413, "management request is too large"));
+            co_return;
+        }
+        raw.append(buffer.data(), n);
+    }
+    auto input = Json::object();
+    if (!raw.empty()) {
+        input = Json::parse(raw, nullptr, false);
+        if (input.is_discarded()) {
+            co_await send(failure(400, "invalid JSON"));
+            co_return;
+        }
+    }
+    const auto authorization = header(parser_->get().base(), "authorization");
+    const auto bearer = authorization.starts_with("Bearer ") ?
+        std::string_view(authorization).substr(7) : std::string_view{};
+    const auto result = app_->admin.handle(method == http::verb::get ? "GET" : "POST", path_,
+        bearer, header(parser_->get().base(), "origin"), input);
+    co_await send(json(result.body, result.status));
 }
 awaitable<void> Session::download(bool streaming) {
     if (!app_->limits.rate(ip_, true)) {

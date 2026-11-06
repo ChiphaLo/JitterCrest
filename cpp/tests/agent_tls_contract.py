@@ -214,7 +214,7 @@ def run(ui_binary, agent_binary, caddy, browser_type, directory, output, label, 
             page.on("response", lambda response: responses.append((response.url, response.status, response.headers)))
             page.goto(origins["ui"] + "/?testMode=webrtc-contract")
             page.wait_for_function("() => Boolean(window.__speedtestTestHooks)")
-            assert page.locator("#nodeSelect").input_value() == "fixture-agent"
+            assert page.locator("#nodeSelect").get_attribute("data-node-id") == "fixture-agent"
             paired = page.evaluate("() => window.__speedtestTestHooks.runPairedMeasurementForTest({planned:3})")
             assert paired["complete"] and not paired["invalidReasons"] and paired["uploadReceivedSeqs"] == [0, 1, 2], paired
             page.click("#restartBtn")
@@ -226,7 +226,7 @@ def run(ui_binary, agent_binary, caddy, browser_type, directory, output, label, 
             payloads = page.evaluate(BROWSER_PAYLOADS, origins["agent"])
             page.goto(origins["ui"] + "/?testMode=webrtc-contract&node=probe-only")
             page.wait_for_function("() => Boolean(window.__speedtestTestHooks)")
-            assert page.locator("#nodeSelect").input_value() == "probe-only"
+            assert page.locator("#nodeSelect").get_attribute("data-node-id") == "probe-only"
             probes = page.evaluate(PROBE_ONLY, origins["probe"])
             offers = [url for url, method in requests if "/webrtc/offer" in url and method == "POST"]
             assert offers and all(url.startswith(origins["agent"] + "/") or url.startswith(origins["probe"] + "/") for url in offers), offers

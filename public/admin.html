@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JitterCrest · 节点管理</title>
+  <link rel="icon" href="/favicon.svg">
+  <style nonce="__CSP_NONCE__">
+    :root { color-scheme: light; font-family: "PingFang SC", system-ui, sans-serif; color: #172033; background: #f2f2f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1120px; margin: auto; padding: 36px 24px 64px; }
+    header, .toolbar, .row-head, .actions, .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    header { margin-bottom: 36px; }
+    a { color: #007aff; text-decoration: none; }
+    h1 { font-size: 28px; letter-spacing: -.7px; margin: 4px 0 0; }
+    h2 { font-size: 20px; margin: 0; }
+    p { color: #687386; line-height: 1.6; }
+    button, input, select, textarea { font: inherit; border-radius: 10px; }
+    button { min-height: 42px; border: 0; background: #007aff; color: white; padding: 9px 17px; cursor: pointer; }
+    button:hover { filter: brightness(.96); }
+    button:disabled { opacity: .5; cursor: wait; }
+    button.secondary { color: #007aff; background: #edf5ff; }
+    button.danger { color: #c53b42; background: #fff0f1; }
+    input, select, textarea { border: 1px solid #dce0e7; padding: 11px 12px; background: #fff; color: inherit; width: 100%; min-height: 44px; }
+    input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #93c7ff; outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    .login { width: min(100%, 440px); margin: 80px auto; background: white; padding: 32px; border-radius: 18px; }
+    .login button { width: 100%; margin-top: 20px; }
+    label { display: block; font-size: 13px; color: #576276; margin: 18px 0 7px; }
+    .toolbar { margin-bottom: 18px; }
+    .toolbar input { max-width: 330px; }
+    .count { font-size: 13px; color: #687386; margin: 8px 0 0; }
+    #notice { margin: 12px 0 20px; color: #b3343d; font-size: 14px; overflow-wrap: anywhere; }
+    .dialog-notice { color: #b3343d; font-size: 14px; margin-top: 14px; overflow-wrap: anywhere; }
+    .node { background: white; border: 1px solid #e8eaf0; border-radius: 15px; padding: 20px; margin: 12px 0; }
+    .identity { min-width: 0; }
+    .identity strong { font-size: 17px; }
+    .address { display: block; color: #7d8797; font-size: 13px; margin-top: 7px; overflow-wrap: anywhere; }
+    .badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 30px; background: #f2f3f7; color: #647084; padding: 5px 11px; font-size: 12px; white-space: nowrap; }
+    .badge::before { content: ""; width: 6px; height: 6px; background: #a1a9b6; border-radius: 50%; }
+    .badge[data-status="online"] { background: #eaf8ee; color: #218542; }
+    .badge[data-status="online"]::before { background: #30b35d; }
+    .actions { justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+    .actions input { max-width: 260px; margin-right: auto; }
+    .empty { text-align: center; padding: 50px; background: white; border-radius: 15px; color: #7d8797; }
+    dialog { width: min(580px, calc(100vw - 28px)); padding: 28px; border: 1px solid #e6e8ee; border-radius: 20px; max-height: 90vh; overflow: auto; color: inherit; }
+    dialog::backdrop { background: #1a264959; }
+    .dialog-head button { background: #f0f2f6; color: #536074; min-width: 42px; padding: 6px; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    textarea { resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.6; min-height: 180px; }
+    .key { font-family: ui-monospace, monospace; overflow-wrap: anywhere; padding: 12px; background: #f3f5f9; border-radius: 10px; font-size: 12px; }
+    @media (max-width: 640px) { main { padding: 24px 16px; } h1 { font-size: 23px; } .columns { grid-template-columns: 1fr; gap: 0; } .toolbar { align-items: stretch; } .toolbar input { min-width: 0; } .actions input { max-width: 100%; } .login { margin: 35px auto; padding: 24px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><div><a href="/">JitterCrest</a><h1>节点管理</h1></div><button id="logout" class="secondary" hidden>退出</button></header>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <form id="login" class="login">
+    <h2>管理员登录</h2>
+    <label for="adminToken">管理令牌</label><input id="adminToken" type="password" autocomplete="current-password" required minlength="32">
+    <button type="submit">登录</button>
+  </form>
+  <section id="dashboard" hidden>
+    <div class="toolbar"><div><h2>后端节点</h2><div class="count" id="count"></div></div><button id="add">接入节点</button></div>
+    <div class="toolbar"><input id="search" type="search" placeholder="搜索名称、ID 或地址" aria-label="搜索节点"><button id="refresh" class="secondary">刷新</button></div>
+    <div id="nodeList"></div>
+  </section>
+</main>
+<dialog id="createDialog" aria-labelledby="createDialogTitle">
+  <div class="dialog-head"><h2 id="createDialogTitle">接入后端</h2><button type="button" id="closeCreate" aria-label="关闭">×</button></div>
+  <div id="createNotice" class="dialog-notice" role="alert"></div>
+  <form id="createForm">
+    <div class="columns"><div><label for="nodeId">节点 ID</label><input id="nodeId" required pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="tokyo-1" maxlength="64"></div><div><label for="nodeLabel">显示名称</label><input id="nodeLabel" required maxlength="80" placeholder="Tokyo"></div></div>
+    <label for="nodeBase">后端 HTTPS 地址</label><input id="nodeBase" type="url" required placeholder="https://node.example.com 或 https://公网IP">
+    <div class="columns"><div><label for="nodeIp">公网 UDP IPv4</label><input id="nodeIp" required inputmode="decimal" placeholder="VPS 公网 IPv4"></div><div><label for="nodeRole">能力</label><select id="nodeRole"><option value="data">测速 + 探针</option><option value="probe">仅探针</option></select></div></div>
+    <p>适用于空闲的 Linux VPS。安装命令使用 Docker，需要 TCP 80/443 和公网 UDP 可达；域名需解析至该 VPS。</p>
+    <div class="actions"><button id="generate" type="submit">生成接入命令</button></div>
+  </form>
+</dialog>
+<dialog id="commandDialog" aria-labelledby="commandDialogTitle">
+  <div class="dialog-head"><h2 id="commandDialogTitle">运行接入命令</h2><button id="closeCommand" aria-label="关闭">×</button></div>
+  <div id="commandNotice" class="dialog-notice" role="alert"></div>
+  <p>复制到对应 VPS 执行。首次构建需几分钟，接入成功后节点会自动出现在主页面。</p>
+  <label for="command">安装命令</label><textarea id="command" readonly spellcheck="false"></textarea>
+  <label>一次性 key · <span id="expiry"></span></label><div id="joinKey" class="key"></div>
+  <div class="actions"><button id="copy">复制命令</button></div>
+</dialog>
+<script nonce="__CSP_NONCE__">
+  const $ = id => document.getElementById(id);
+  let token = "", nodes = [], busy = false;
+  const statusNames = {online:"在线", offline:"离线", pending:"待安装", installing:"安装中", expired:"key 已过期", configured:"已配置"};
+  function notice(message = "") { for (const id of ["notice","createNotice","commandNotice"]) $(id).textContent = ""; const id = $("createDialog").open ? "createNotice" : $("commandDialog").open ? "commandNotice" : "notice"; $(id).textContent = message; }
+  function logout() { token = ""; nodes = []; $("nodeList").replaceChildren(); $("command").value = ""; $("joinKey").textContent = ""; $("commandDialog").close(); $("createDialog").close(); $("dashboard").hidden = true; $("logout").hidden = true; $("login").hidden = false; }
+  async function api(path, body) {
+    const response = await fetch(path, {method:body ? "POST" : "GET", cache:"no-store", credentials:"omit", signal:AbortSignal.timeout(15000), headers:{"Authorization":"Bearer " + token, "Content-Type":"application/json"}, ...(body ? {body:JSON.stringify(body)} : {})});
+    const result = await response.json();
+    if (response.status === 401) logout();
+    if (!response.ok) throw new Error(result.error || "请求失败");
+    return result;
+  }
+  async function guarded(action) {
+    if (busy) return;
+    busy = true; notice();
+    document.querySelectorAll("button").forEach(b => b.disabled = true);
+    try { await action(); } catch (error) { notice(error.message); }
+    finally { busy = false; document.querySelectorAll("button").forEach(b => b.disabled = false); }
+  }
+  function showCommand(result) { $("command").value = result.command; $("joinKey").textContent = result.key; $("copy").textContent = "复制命令"; $("expiry").textContent = new Date(result.expiresAt * 1000).toLocaleTimeString() + " 前使用"; $("createDialog").close(); $("commandDialog").showModal(); }
+  function render() {
+    $("count").textContent = nodes.length + " 个节点 · " + nodes.filter(n => n.status === "online").length + " 个在线";
+    const needle = $("search").value.trim().toLocaleLowerCase();
+    $("nodeList").replaceChildren();
+    for (const node of nodes.filter(n => [n.id,n.label,n.base].some(v => String(v).toLocaleLowerCase().includes(needle)))) {
+      const row = document.createElement("article"); row.className = "node"; row.dataset.nodeId = node.id;
+      const head = document.createElement("div"); head.className = "row-head";
+      const identity = document.createElement("div"); identity.className = "identity";
+      const title = document.createElement("strong"); title.textContent = node.label;
+      const address = document.createElement("span"); address.className = "address"; address.textContent = node.id + " · " + (node.base || "主端") + " · " + (node.role === "probe" ? "仅探针" : "测速 + 探针");
+      identity.append(title,address); const badge = document.createElement("span"); badge.className = "badge"; badge.dataset.status = node.status; badge.textContent = (node.enabled ? "" : "已停用 · ") + statusNames[node.status]; head.append(identity,badge);
+      const actions = document.createElement("div"); actions.className = "actions";
+      const name = document.createElement("input"); name.value = node.label; name.maxLength = 80; name.setAttribute("aria-label",node.id + " 显示名称");
+      const save = document.createElement("button"); save.textContent = "保存名称"; save.className = "secondary";
+      save.onclick = () => guarded(async () => { await api("/api/admin/node", {id:node.id,action:"update",label:name.value,enabled:node.enabled}); await refresh(); }); actions.append(name,save);
+      if (node.base) {
+        const toggle = document.createElement("button"); toggle.className = "secondary"; toggle.textContent = node.enabled ? "停用" : "启用";
+        toggle.onclick = () => guarded(async () => { await api("/api/admin/node", {id:node.id,action:"update",label:node.label,enabled:!node.enabled}); await refresh(); }); actions.append(toggle);
+        if (node.managed) { const reset = document.createElement("button"); reset.className = "secondary"; reset.textContent = "重置 key"; reset.onclick = () => { if(confirm("重置将撤销现有接入凭据，节点需重新安装接入。继续？")) guarded(async () => { showCommand(await api("/api/admin/node",{id:node.id,action:"reset"})); await refresh(); }); }; actions.append(reset); }
+        const remove = document.createElement("button"); remove.className = "danger"; remove.textContent = "移除";
+        remove.onclick = () => { if(confirm("从主端移除 " + node.label + " 并撤销接入凭据？VPS 上的容器需另行停止。")) guarded(async () => { await api("/api/admin/node", {id:node.id,action:"delete"}); await refresh(); }); }; actions.append(remove);
+      }
+      row.append(head,actions); $("nodeList").append(row);
+    }
+    if (!$("nodeList").children.length) { const empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "没有匹配的节点"; $("nodeList").append(empty); }
+  }
+  async function refresh() { const result = await api("/api/admin/nodes"); nodes = result.nodes; render(); }
+  $("login").onsubmit = e => { e.preventDefault(); guarded(async () => { if (location.protocol !== "https:" && !["localhost","127.0.0.1"].includes(location.hostname)) throw new Error("请通过 HTTPS 打开管理后台"); token = $("adminToken").value; $("adminToken").value = ""; await refresh(); $("login").hidden = true; $("dashboard").hidden = false; $("logout").hidden = false; }); };
+  $("logout").onclick = logout; $("search").oninput = render;
+  $("refresh").onclick = () => guarded(refresh);
+  $("add").onclick = () => $("createDialog").showModal();
+  $("closeCreate").onclick = () => $("createDialog").close();
+  $("closeCommand").onclick = () => { $("commandDialog").close(); $("command").value = ""; $("joinKey").textContent = ""; };
+  $("createForm").onsubmit = e => { e.preventDefault(); guarded(async () => { const result = await api("/api/admin/enrollments", {id:$("nodeId").value.trim(),label:$("nodeLabel").value.trim(),base:$("nodeBase").value.trim().replace(/\/$/,""),udp4:$("nodeIp").value.trim(),role:$("nodeRole").value}); showCommand(result); $("createForm").reset(); await refresh(); }); };
+  $("copy").onclick = () => guarded(async () => { await navigator.clipboard.writeText($("command").value); $("copy").textContent = "已复制"; });
+  setInterval(() => { if(token && !busy && !document.hidden && !$("createDialog").open && !$("commandDialog").open && !$("nodeList").contains(document.activeElement)) guarded(refresh); },30000);
+</script>
+</body>
+</html>
