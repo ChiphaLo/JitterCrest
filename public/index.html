@@ -2138,6 +2138,7 @@
         grid: uiColor("--chart-grid", "#E5E5EA"),
         label: uiColor("--chart-label", "#8E8E93"),
         marker: uiColor("--text-tertiary", "#94a3b8"),
+        halo: uiColor("--surface-solid", "#ffffff"),
       };
       const w = 1000;
       const h = 220;
@@ -2202,6 +2203,37 @@
         return left + (clamped - minAxis) / (maxAxis - minAxis) * plotW;
       };
       const esc = (value) => String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+      const measure = drawLatencyPlot.measure || (drawLatencyPlot.measure = document.createElement("canvas").getContext("2d"));
+      measure.font = "600 11px " + getComputedStyle(container).fontFamily;
+      // Labels share one lane per row. Overlapping neighbours merge into a block
+      // placed at the least-squares fit of their anchors, so each label stays as
+      // close to its marker as the plot bounds allow.
+      const placeLabels = (items) => {
+        const gap = 10, minX = left, maxX = w - right, blocks = [];
+        const fit = (block) => {
+          let offset = 0, shift = 0;
+          block.items.forEach((item) => {
+            item.offset = offset;
+            shift += item.anchor - offset - item.width / 2;
+            offset += item.width + gap;
+          });
+          block.width = offset - gap;
+          block.start = Math.max(minX, Math.min(maxX - block.width, shift / block.items.length));
+          return block;
+        };
+        items.slice().sort((a, b) => a.anchor - b.anchor).forEach((item) => {
+          let block = fit({ items: [item] });
+          while (blocks.length) {
+            const prev = blocks[blocks.length - 1];
+            if (prev.start + prev.width + gap <= block.start) break;
+            blocks.pop();
+            block = fit({ items: prev.items.concat(block.items) });
+          }
+          blocks.push(block);
+        });
+        blocks.forEach((block) => block.items.forEach((item) => { item.center = block.start + item.offset + item.width / 2; }));
+        return items;
+      };
       const parts = [];
       parts.push('<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="WebRTC latency distribution">');
       parts.push('<text x="12" y="28" fill="' + theme.label + '" font-size="12">ms</text>');
@@ -2216,36 +2248,21 @@
         const vals = row.samples.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
         parts.push('<text x="12" y="' + (row.y + 5) + '" fill="' + theme.label + '" font-size="12" font-weight="600">' + esc(row.label) + '</text>');
         if (!vals.length) return;
-        // One set per direction: only the axis range is shared between rows.
-        const labelBoxes = [[], []];
         const bandTop = row.y - 20, bandBottom = row.y + 22;
-        const markers = [["P10", .1], ["P50", .5], ["P95", .95], ["P99", .99]];
-        markers.forEach(([label, quantile]) => {
-          const value = percentile(vals, quantile), rx = x(value);
+        const labelY = bandTop - 14, elbowY = bandTop - 5;
+        const markers = placeLabels([["P10", .1], ["P50", .5], ["P95", .95], ["P99", .99]].map(([label, quantile]) => {
+          const value = percentile(vals, quantile), anchor = x(value);
           const text = label + " " + value.toFixed(1) + " ms";
-          const labelWidth = text.length * 7 + 8, gap = 8;
-          let placement = null;
-          for (let layer = 0; layer < 2; layer += 1) {
-            for (const offset of [0, -1, 1, -2, 2, -3, 3]) {
-              const center = Math.max(left + labelWidth / 2,
-                Math.min(w - right - labelWidth / 2, rx + offset * (labelWidth + gap)));
-              const start = center - labelWidth / 2, end = center + labelWidth / 2;
-              if (labelBoxes[layer].some(box => start < box.end + gap && end > box.start - gap)) continue;
-              const score = Math.abs(center - rx) + layer * 12;
-              if (!placement || score < placement.score) placement = {center, start, end, layer, score};
-            }
-          }
-          // Four bounded labels fit in two lanes at the fixed SVG plot width.
-          if (!placement) placement = {center:rx, start:rx-labelWidth/2, end:rx+labelWidth/2, layer:1};
-          labelBoxes[placement.layer].push(placement);
-          const labelY = bandTop - (placement.layer ? 8 : 26);
+          return { label, value, anchor, text, width: measure.measureText(text).width };
+        }));
+        markers.forEach(({ label, value, anchor: rx, text, center }) => {
           parts.push('<g class="latency-percentile" data-direction="' + row.key + '" data-percentile="' + label + '" data-value="' + value + '">');
           parts.push('<title>' + row.label + ' ' + label + ': ' + value.toFixed(1) + ' ms</title>');
           parts.push('<line class="latency-percentile-line" x1="' + rx.toFixed(2) + '" x2="' + rx.toFixed(2) + '" y1="' + bandTop + '" y2="' + bandBottom + '" stroke="' + theme.marker + '" stroke-width="1.8" stroke-dasharray="6 6"/>');
-          if (Math.abs(placement.center - rx) > 1) {
-            parts.push('<path d="M' + rx.toFixed(2) + ' ' + bandTop + 'L' + placement.center.toFixed(2) + ' ' + (labelY + 5) + '" fill="none" stroke="' + theme.marker + '" stroke-width="0.75" opacity="0.65"/>');
+          if (Math.abs(center - rx) > 1) {
+            parts.push('<path class="latency-percentile-leader" d="M' + rx.toFixed(2) + ' ' + bandTop + 'L' + rx.toFixed(2) + ' ' + elbowY + 'L' + center.toFixed(2) + ' ' + (labelY + 4) + '" fill="none" stroke="' + theme.marker + '" stroke-width="0.9" opacity="0.7"/>');
           }
-          parts.push('<text class="latency-percentile-label" x="' + placement.center.toFixed(2) + '" y="' + labelY + '" text-anchor="middle" fill="' + theme.label + '" font-size="11" font-weight="600">' + esc(text) + '</text></g>');
+          parts.push('<text class="latency-percentile-label" x="' + center.toFixed(2) + '" y="' + labelY + '" text-anchor="middle" fill="' + theme.label + '" font-size="11" font-weight="600" paint-order="stroke" stroke="' + theme.halo + '" stroke-width="4" stroke-linejoin="round">' + esc(text) + '</text></g>');
         });
         const min = vals[0];
         const q1 = percentile(vals, .25);
