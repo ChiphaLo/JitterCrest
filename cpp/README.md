@@ -82,7 +82,8 @@ boundary and schedule state changes through the owning executor.
 On Linux, install CMake >=3.22, a C++20 compiler, Ninja, Boost.System 1.83
 (the reviewed atomic-count header revision; other revisions need review),
 OpenSSL >=3, nlohmann-json >=3.11, Python 3 for asset generation/tests, and
-libcurl >=7.85 with asynchronous DNS support. Runtime never invokes Python,
+libcurl >=7.85 with asynchronous DNS support, plus libnghttp2 >=1.59 (found with
+pkg-config) for the [TLS HTTP/2 listener](docs/tls-edge.md). Runtime never invokes Python,
 Rust or Node. The development environment used Ubuntu 24.04, Clang 18.1.3,
 Boost 1.83, OpenSSL 3.0.13, libcurl 8.5.0 and nlohmann-json 3.11.3.
 Distribution package revisions should be recorded with benchmark results.

@@ -24,7 +24,7 @@ names do not imply a Rust runtime dependency.
 
 Linux x86_64 is validated. Install CMake >=3.22, Ninja, a C++20 compiler (validated
 with Clang18), Boost.System1.83, OpenSSL3, libcurl>=7.85 with asynchronous DNS,
-nlohmann-json>=3.11, Python3 and Git. The native transport bootstrap pins
+libnghttp2>=1.59 with pkg-config, nlohmann-json>=3.11, Python3 and Git. The native transport bootstrap pins
 libdatachannel0.24.6 and applies the versioned dependency patches.
 
 ```sh
@@ -156,6 +156,14 @@ Never expose a listener trusting arbitrary forwarded identity headers. Use a
 non-root service and bounded resources. UI, probe-only and data-agent roles are
 described in the [C++ documentation](cpp/README.md); generic service/proxy examples
 and packaging tools are in [`cpp/deploy/`](cpp/deploy/).
+
+Browsers stream uploads only over HTTP/2, where the server's receive window
+bounds one stream to window/RTT. Reverse proxies with a fixed 1 MiB window (such as
+Caddy) therefore cap a 54 ms path near 155 Mbit/s. For speed-test traffic, enable
+the built-in TLS listener (`SPEEDTEST_TLS_PORT`, `SPEEDTEST_TLS_CERT`,
+`SPEEDTEST_TLS_KEY`), which advertises 32 MiB stream and 64 MiB connection
+windows, and use that origin as the node `base`. See the
+[TLS HTTP/2 listener notes](cpp/docs/tls-edge.md).
 
 No credentials, real deployment configuration, binary releases, backups or raw
 operational captures belong in this repository. See [security](SECURITY.md) and

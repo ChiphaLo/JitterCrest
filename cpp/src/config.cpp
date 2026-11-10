@@ -317,6 +317,26 @@ Config Config::from_environment(const Environment &get) {
     (void)boost::asio::ip::make_address(cfg.host, ec);
     if (ec)
         throw std::invalid_argument("SPEEDTEST_HOST must be an IP literal");
+    cfg.tls_port =
+        numeric(get, {.name = "SPEEDTEST_TLS_PORT", .fallback = 0, .minimum = 0, .maximum = 65535});
+    cfg.tls_host = get("SPEEDTEST_TLS_HOST").value_or("0.0.0.0");
+    cfg.tls_cert = get("SPEEDTEST_TLS_CERT").value_or("");
+    cfg.tls_key = get("SPEEDTEST_TLS_KEY").value_or("");
+    if (cfg.tls_port) {
+        (void)boost::asio::ip::make_address(cfg.tls_host, ec);
+        if (ec)
+            throw std::invalid_argument("SPEEDTEST_TLS_HOST must be an IP literal");
+        if (cfg.tls_cert.empty() || cfg.tls_key.empty())
+            throw std::invalid_argument(
+                "SPEEDTEST_TLS_PORT requires SPEEDTEST_TLS_CERT and SPEEDTEST_TLS_KEY");
+        if (cfg.tls_port == cfg.port)
+            throw std::invalid_argument("SPEEDTEST_TLS_PORT must differ from PORT");
+        // The TLS listener relays to PORT and supplies the client address in proxy headers.
+        if (!cfg.trust_proxy || !cfg.trusted_proxy_ips.contains(cfg.host))
+            throw std::invalid_argument(
+                "SPEEDTEST_TLS_PORT requires TRUST_PROXY_HEADERS=1 with SPEEDTEST_HOST in "
+                "TRUSTED_PROXY_IPS");
+    }
     return cfg;
 }
 } // namespace speedtest

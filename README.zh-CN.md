@@ -125,15 +125,15 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
 已验证平台为 **Linux x86_64**；不声称其他架构已验证。需要：
 
 - CMake ≥ 3.22、Ninja 和支持 C++20 的编译器；已验证 Clang 18。
-- Boost.System 1.83、OpenSSL 3、libcurl ≥ 7.85（需要异步 DNS）、nlohmann-json ≥ 3.11。
+- Boost.System 1.83、OpenSSL 3、libcurl ≥ 7.85（需要异步 DNS）、libnghttp2 ≥ 1.59（通过 pkg-config 查找）、nlohmann-json ≥ 3.11。
 - Git、Python 3；Python 用于构建／测试工具，而非服务端运行。
 - libdatachannel 0.24.6：下方脚本固定源码版本并应用仓库中的补丁。
 
 在 Ubuntu 24.04 上，可参考项目 CI 安装依赖：
 
     sudo apt-get update
-    sudo apt-get install -y clang-18 lld-18 cmake ninja-build \
-      libboost-system1.83-dev libssl-dev libcurl4-openssl-dev \
+    sudo apt-get install -y clang-18 lld-18 cmake ninja-build pkg-config \
+      libboost-system1.83-dev libssl-dev libcurl4-openssl-dev libnghttp2-dev \
       nlohmann-json3-dev python3 git
 
 其他发行版的包名和版本可能不同；构建与发布包仍受目标系统架构、glibc、CA 证书和动态库环境约束。不要将未在目标系统验证的二进制视为通用包。
@@ -209,6 +209,16 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
 - 浏览器需要同时能访问 HTTP(S) 信令／测速接口和 WebRTC 的 UDP 路径；节点可能位于 NAT 后，需要按真实拓扑设置公网映射与防火墙。
 - HTTPS 域名需要有效证书；IP HTTPS 需要浏览器信任的证书、包含对应 IP 的证书标识以及可用的验证／签发方式。服务商是否支持应独立确认。不要全局忽略证书错误。
 - 仅探针节点需在服务端显式设置 SPEEDTEST_PROBE_ONLY=1；仅仅在网页里给节点起名不能完成角色隔离。
+
+### 内置 TLS / HTTP/2 测速入口
+
+浏览器的流式上传只能走 HTTP/2，单个上传流的速度上限等于服务器 HTTP/2 接收窗口除以往返延迟。Caddy 等接收窗口固定为 1 MiB 的反向代理在 54 ms 线路上只能跑到约 155 Mbit/s。测速节点应启用程序内置的 TLS 入口：
+
+    SPEEDTEST_TLS_PORT=8444
+    SPEEDTEST_TLS_CERT=/etc/jittercrest/tls/node.crt
+    SPEEDTEST_TLS_KEY=/etc/jittercrest/tls/node.key
+
+该入口通告 32 MiB 单流窗口和 64 MiB 连接窗口，把每个请求转交本机 PORT，并用 TLS 对端地址覆盖客户端提交的代理头，因此要求 TRUST_PROXY_HEADERS=1 且 SPEEDTEST_HOST 位于 TRUSTED_PROXY_IPS。证书文件变化后约 30 秒内自动重新加载，可由现有 Caddy 等 ACME 客户端继续签发并定期复制到上述路径。节点的 base 应改为该入口地址，例如 https://203.0.113.10:8444。详见 [TLS HTTP/2 入口说明](cpp/docs/tls-edge.md)。
 
 ## 部署与安全
 

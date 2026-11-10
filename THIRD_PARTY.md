@@ -3,8 +3,8 @@
 ## Active C++20 implementation
 
 The backend uses Boost (BSL-1.0), nlohmann-json (MIT), OpenSSL (Apache-2.0),
-libcurl (curl license), libdatachannel (MPL-2.0), libjuice (MPL-2.0), usrsctp
-(BSD-3-Clause) and plog (MIT). Keep upstream copyright/license notices when
+libcurl (curl license), nghttp2 (MIT), libdatachannel (MPL-2.0), libjuice
+(MPL-2.0), usrsctp (BSD-3-Clause) and plog (MIT). Keep upstream copyright/license notices when
 redistributing dependencies or bundled binaries. Python/CMake are build/test
 utilities, not server runtime subprocesses.
 

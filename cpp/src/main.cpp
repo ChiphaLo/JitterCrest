@@ -1,4 +1,5 @@
 #include "speedtest/client_info.hpp"
+#include "speedtest/edge.hpp"
 #include "speedtest/http.hpp"
 #include "speedtest/rtc.hpp"
 #include <boost/asio/signal_set.hpp>
@@ -15,14 +16,29 @@ int main() {
         speedtest::RtcRuntime native_rtc(cfg.rtc_experimental,
                                          static_cast<unsigned>(cfg.io_threads));
         boost::asio::signal_set signals(io, SIGINT, SIGTERM);
-        speedtest::HttpServer server(io, cfg, [&signals] { signals.cancel(); });
-        signals.async_wait([&server](const boost::system::error_code &error, int) {
-            if (!error)
+        std::optional<speedtest::TlsEdge> edge;
+        speedtest::HttpServer server(io, cfg, [&signals, &edge] {
+            signals.cancel();
+            if (edge)
+                edge->stop();
+        });
+        if (cfg.tls_port)
+            edge.emplace(io, cfg);
+        signals.async_wait([&server, &edge](const boost::system::error_code &error, int) {
+            if (!error) {
+                if (edge)
+                    edge->stop();
                 server.stop();
+            }
         });
         server.start();
+        if (edge)
+            edge->start();
         std::clog << speedtest::Json{{"event", "http_listener_started"},
                                      {"address", cfg.host + ":" + std::to_string(cfg.port)},
+                                     {"tls_address", cfg.tls_port ? cfg.tls_host + ":" +
+                                                                        std::to_string(cfg.tls_port)
+                                                                  : ""},
                                      {"web_ui", speedtest::assets::web_ui()},
                                      {"rtc_native_enabled", cfg.rtc_experimental}}
                          .dump()

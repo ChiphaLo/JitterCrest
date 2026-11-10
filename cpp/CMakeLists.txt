@@ -11,6 +11,8 @@ find_package(OpenSSL 3 REQUIRED)
 find_package(Boost 1.83 REQUIRED COMPONENTS system)
 find_package(Threads REQUIRED)
 find_package(CURL 7.85 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2>=1.59)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(LibDataChannel 0.24.6 EXACT CONFIG REQUIRED)
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prepare_boost.py"
@@ -106,8 +108,9 @@ add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp"
     deploy/speedtest-cpp-staging.service deploy/staging.env.example deploy/Caddyfile.staging.example
     "${CMAKE_CURRENT_SOURCE_DIR}/../.dockerignore" "${CMAKE_CURRENT_SOURCE_DIR}/../THIRD_PARTY.md"
   VERBATIM)
-add_library(speedtest_http src/client_info.cpp src/admin.cpp src/http.cpp src/rtc.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
-target_link_libraries(speedtest_http PUBLIC speedtest_core CURL::libcurl LibDataChannel::LibDataChannel)
+add_library(speedtest_http src/client_info.cpp src/admin.cpp src/http.cpp src/edge.cpp src/rtc.cpp "${CMAKE_CURRENT_BINARY_DIR}/generated/assets.cpp")
+target_link_libraries(speedtest_http PUBLIC speedtest_core CURL::libcurl LibDataChannel::LibDataChannel
+  OpenSSL::SSL PkgConfig::NGHTTP2)
 # Boost 1.83's Clang detection predates Clang 18's C++20 coroutine macros.
 target_compile_definitions(speedtest_http PUBLIC BOOST_ASIO_HAS_CO_AWAIT BOOST_ASIO_HAS_STD_COROUTINE)
 target_compile_options(speedtest_http PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Werror)
@@ -123,3 +126,6 @@ add_test(NAME bounded_client_info_provider COMMAND speedtest-client-info-test)
 add_executable(speedtest-admin-test tests/admin_test.cpp)
 target_link_libraries(speedtest-admin-test PRIVATE speedtest_http)
 add_test(NAME node_management_enrollment COMMAND speedtest-admin-test)
+add_executable(speedtest-edge-test tests/edge_test.cpp)
+target_link_libraries(speedtest-edge-test PRIVATE speedtest_http)
+add_test(NAME tls_http2_edge_relay COMMAND speedtest-edge-test)

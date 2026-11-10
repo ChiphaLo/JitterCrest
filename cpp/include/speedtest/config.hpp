@@ -16,11 +16,13 @@ struct Config {
     Json nodes;
     std::string admin_token, admin_state, public_origin;
     std::string controller_origin, agent_id, agent_key;
+    std::string tls_host, tls_cert, tls_key;
     std::optional<std::string> rtc_udp4;
     std::uint64_t max_upload{};
     std::uint64_t upload_ms{};
     std::uint64_t rtc_session_ms{};
     std::uint64_t port{};
+    std::uint64_t tls_port{};
     std::uint64_t max_download{};
     std::uint64_t max_stream_upload{};
     std::uint64_t fixed_download_ms{};
