@@ -10,7 +10,10 @@ struct ProgressKey {
 struct ProgressOptions {
     std::uint8_t lanes = 1;
     bool reusable = false;
-    std::uint64_t warmup_ms = 2000;
+    // The measurement window opens warmup_ms after the first received byte and
+    // lasts window_ms; the browser applies the same rule to downloads.
+    std::uint64_t warmup_ms = 1000;
+    std::uint64_t window_ms = 10000;
     std::chrono::milliseconds ttl{35000};
     std::size_t maximum = 128, per_ip = 16;
 };
@@ -33,7 +36,7 @@ class UploadProgress {
     mutable std::mutex mutex_;
     std::uint16_t active_{}, started_{}, finished_{};
     bool closing_{}, failed_{};
-    std::uint64_t first_{}, measured_start_{}, end_{}, bytes_{}, measured_{};
+    std::uint64_t first_{}, end_{}, bytes_{}, measured_{};
 };
 class UploadReceipt {
   public:

@@ -23,13 +23,15 @@ Json UploadProgress::snapshot() const {
     const std::lock_guard guard(mutex_);
     const bool done = done_locked();
     const auto now = done ? end_ : micros();
-    const auto elapsed = [now](std::uint64_t start) {
-        return start == 0 ? 0.0 : static_cast<double>(now > start ? now - start : 0) / 1000.;
-    };
+    const auto start = first_ + options_.warmup_ms * 1000;
+    const auto window = options_.window_ms * 1000;
+    const auto elapsed = first_ && now > first_ ? now - first_ : 0;
+    const auto measured = first_ && now > start ? std::min(now - start, window) : 0;
     return Json{{"bytes", bytes_},
-                {"measuredBytes", std::min(bytes_, measured_)},
-                {"elapsedMs", elapsed(first_)},
-                {"measuredElapsedMs", elapsed(measured_start_)},
+                {"measuredBytes", measured_},
+                {"elapsedMs", static_cast<double>(elapsed) / 1000.},
+                {"measuredElapsedMs", static_cast<double>(measured) / 1000.},
+                {"complete", first_ != 0 && now >= start + window},
                 {"done", done},
                 {"failed", failed_},
                 {"expired", Clock::now() - born_ >= options_.ttl}};
@@ -122,11 +124,9 @@ void UploadReceipt::received(std::size_t bytes) {
     if (!p.first_)
         p.first_ = now;
     p.bytes_ += bytes;
-    if (now - p.first_ >= p.options_.warmup_ms * 1000) {
+    const auto start = p.first_ + p.options_.warmup_ms * 1000;
+    if (now >= start && now < start + p.options_.window_ms * 1000)
         p.measured_ += bytes;
-        if (!p.measured_start_)
-            p.measured_start_ = now;
-    }
 }
 UploadReceipt &UploadReceipt::operator=(UploadReceipt &&other) noexcept {
     if (this != &other) {

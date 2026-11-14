@@ -2294,7 +2294,7 @@
     }
     const speedCharts = Object.fromEntries(["download", "upload"].map(kind => [kind, {
       points: [], result: null, reference: null, referenceBytes: 0, referenceMs: 0,
-      durationMs: 0, peak: 0, rangeMs: kind === "upload" ? 12000 : 10000,
+      durationMs: 0, peak: 0, rangeMs: 10000,
       active: false, dirty: true, resize: true, view: null, display: 0, referenceDisplay: 0,
     }]));
     let speedChartFrame = null, lastSpeedChartPaint = 0;
@@ -2319,7 +2319,6 @@
       const chart = speedCharts[kind];
       if (!chart) return;
       chart.active = true;
-      chart.rangeMs = kind === "upload" && selectedSpeedThreads() === 1 ? 12000 : 10000;
       chart.dirty = true;
       scheduleSpeedCharts();
     }
@@ -2330,7 +2329,7 @@
       const last = chart.points[chart.points.length - 1];
       if (last && sample.atMs <= last.atMs) return;
       const display = Number.isFinite(sample.displayValue) ? Math.max(0,sample.displayValue) : sample.value;
-      chart.points.push({atMs:sample.atMs,value:sample.value,display,source:sample.source || (kind==="upload" ? "browser-queue" : "client-received")});
+      chart.points.push({atMs:sample.atMs,value:sample.value,display,source:sample.source});
       if (chart.points.length > 2048) chart.points.shift();
       chart.referenceBytes += Number.isFinite(sample.sampleBytes) ? sample.sampleBytes : 0;
       chart.referenceMs += Number.isFinite(sample.intervalMs) ? sample.intervalMs : 0;
@@ -4163,12 +4162,88 @@
         }
         return res;
       }
+      // Download and upload use one receiver-side measurement. The window opens
+      // SPEED_WARMUP_MS after the receiver's first payload byte, lasts
+      // SPEED_WINDOW_MS and is sampled every SPEED_SAMPLE_MS. The browser is the
+      // receiver for downloads; the node applies the same rule to uploads.
+      const SPEED_WARMUP_MS = 1000, SPEED_WINDOW_MS = 10000, SPEED_SAMPLE_MS = 100, SPEED_DEADLINE_MS = 20000;
+      function createReceiverWindow() {
+        let first = null, end = null, bytes = 0, measured = 0;
+        const snapshot = (now) => {
+          const at = end === null ? now : end;
+          const start = first === null ? null : first + SPEED_WARMUP_MS;
+          return {
+            bytes, measuredBytes: measured,
+            elapsedMs: first === null ? 0 : Math.max(0, at - first),
+            measuredElapsedMs: start === null ? 0 : Math.min(SPEED_WINDOW_MS, Math.max(0, at - start)),
+            complete: start !== null && at >= start + SPEED_WINDOW_MS,
+            done: end !== null, failed: false, expired: false,
+          };
+        };
+        return {
+          snapshot,
+          received(length, now) {
+            if (length <= 0 || end !== null) return;
+            if (first === null) first = now;
+            bytes += length;
+            const start = first + SPEED_WARMUP_MS;
+            if (now >= start && now < start + SPEED_WINDOW_MS) measured += length;
+          },
+          finish(now) { if (end === null) end = now; return snapshot(now); },
+        };
+      }
+      function createWindowSampler(concurrency, source) {
+        const samples = [], sampleDetails = [], history = [];
+        let lastMs = 0, lastBytes = 0, measuring = false, lastWarmupMs = -Infinity, final = null;
+        return {samples, sampleDetails, get final() { return final; }, accept(stats) {
+          if (!stats || !Number.isSafeInteger(stats.bytes) || stats.bytes < 0
+              || !Number.isSafeInteger(stats.measuredBytes) || stats.measuredBytes < 0 || stats.measuredBytes > stats.bytes
+              || !Number.isFinite(stats.elapsedMs) || !Number.isFinite(stats.measuredElapsedMs)
+              || stats.elapsedMs < 0 || stats.measuredElapsedMs < 0 || stats.measuredElapsedMs > SPEED_WINDOW_MS
+              || stats.measuredElapsedMs > stats.elapsedMs || stats.elapsedMs > 180000
+              || typeof stats.complete !== "boolean" || typeof stats.done !== "boolean"
+              || typeof stats.failed !== "boolean" || typeof stats.expired !== "boolean") {
+            throw new Error("invalid receiver telemetry");
+          }
+          if (stats.failed || stats.expired) throw new Error("receiver telemetry failed or expired");
+          const at = stats.measuredElapsedMs, bytes = stats.measuredBytes;
+          if (at < lastMs || bytes < lastBytes || (final && stats.bytes < final.bytes)) throw new Error("receiver counters regressed");
+          final = stats;
+          if (at === 0) {
+            if (stats.bytes > 0 && stats.elapsedMs - lastWarmupMs >= SPEED_SAMPLE_MS) {
+              lastWarmupMs = stats.elapsedMs;
+              self.postMessage({type: "phase", phase: "warmup",
+                warmupElapsedMs: Math.min(SPEED_WARMUP_MS, stats.elapsedMs), warmupTotalMs: SPEED_WARMUP_MS});
+            }
+            return;
+          }
+          if (at - lastMs < SPEED_SAMPLE_MS / 2 && !(stats.complete && at > lastMs)) return;
+          if (!measuring) { measuring = true; self.postMessage({type: "phase", phase: "measuring"}); }
+          const sample = publishThroughputSample(history, lastMs, at, bytes - lastBytes, concurrency, at,
+            {source, referenceValue: fmtMbps(bytes, at)});
+          samples.push(sample.rawValue);
+          sampleDetails.push({value: sample.rawValue, bytes: bytes - lastBytes, elapsedMs: sample.elapsedMs, atMs: at, source});
+          lastMs = at; lastBytes = bytes;
+        }};
+      }
+      function postWindowResult(sampler, extra) {
+        const stats = sampler.final;
+        if (!stats || stats.measuredElapsedMs <= 0 || stats.measuredBytes <= 0) {
+          throw new Error("transfer ended before the measurement window opened");
+        }
+        const stable = fmtMbps(stats.measuredBytes, stats.measuredElapsedMs);
+        self.postMessage({type: "result", bytes: stats.measuredBytes, ms: stats.measuredElapsedMs, raw: stable, stable,
+          sampledStable: stableRate(sampler.samples), samples: sampler.samples, sampleDetails: sampler.sampleDetails,
+          chartDurationMs: stats.measuredElapsedMs, complete: stats.complete, totalBytes: stats.bytes, totalMs: stats.elapsedMs,
+          endToEndMbps: fmtMbps(stats.bytes, Math.max(1, stats.elapsedMs)), warmupMs: SPEED_WARMUP_MS,
+          windowMs: SPEED_WINDOW_MS, sampleIntervalMs: SPEED_SAMPLE_MS, sampleCount: sampler.samples.length, ...extra});
+      }
       async function downloadLane(base, laneId, onBytes, signal) {
-        // A finite server response may end before the timed run on a fast link.
-        // Keep one lane active by opening its next sequential response.
+        // A finite server response may end before the window closes on a fast
+        // link. Keep the lane active by opening its next sequential response.
         while (!signal.aborted) {
           const res = await checkedFetch(
-            buildUrl("download-stream?n=" + randomId() + "&lane=" + laneId, base),
+            buildUrl("download-stream?n=" + randomId() + "&lane=" + laneId + "&maxMs=" + SPEED_DEADLINE_MS, base),
             { cache: "no-store", signal }
           );
           const reader = res.body.getReader();
@@ -4179,174 +4254,44 @@
             const len = item.value ? item.value.byteLength : 0;
             if (len > 0) {
               received = true;
-              onBytes(laneId, len);
+              onBytes(len);
             }
           }
           if (!received && !signal.aborted) throw new Error("empty download stream");
         }
       }
-      async function downloadMulti(base, concurrency, singleStreamBase, singleStreamProtocol) {
-        if (concurrency <= 1) return await download(singleStreamBase || base, singleStreamProtocol);
-        const durationMs = 10000;
-        const sampleMs = 100;
-        const warmupMs = 500;
-        const controller = new AbortController();
-        const laneBytes = Array(concurrency).fill(0n);
-        let totalBytes = 0n;
-        const samples = [];
-        const sampleDetails = [];
-        const displayHistory = [];
-        const laneErrors = [];
-        const started = performance.now();
-        let lastAt = started;
-        let lastBytes = 0n;
-        const onBytes = (laneId, len) => {
-          const b = BigInt(len);
-          laneBytes[laneId] += b;
-          totalBytes += b;
+      async function download(base, concurrency, protocol) {
+        const receiver = createReceiverWindow(), sampler = createWindowSampler(concurrency, "client-received");
+        const controller = new AbortController(), started = performance.now(), errors = [];
+        let ttfbMs = null;
+        const fail = (error, label) => {
+          if (error && error.name === "AbortError" && controller.signal.aborted) return;
+          errors.push((label ? label + ": " : "") + (error && error.message ? error.message : "unknown error"));
+          controller.abort();
+        };
+        self.postMessage({type: "phase", phase: "connecting"});
+        const onBytes = (length) => {
+          const now = performance.now();
+          if (ttfbMs === null) ttfbMs = now - started;
+          receiver.received(length, now);
         };
         const timer = setInterval(() => {
-          const now = performance.now();
-          const dt = now - lastAt;
-          if (dt <= 0) return;
-          const delta = totalBytes - lastBytes;
-          const mbps = fmtMbps(Number(delta), dt);
-          if (Number.isFinite(mbps) && now - started >= warmupMs) {
-            const sample = publishThroughputSample(displayHistory, lastAt, now, Number(delta), concurrency, now - started - warmupMs);
-            samples.push(sample.rawValue);
-            sampleDetails.push({ value: sample.rawValue, bytes: Number(delta), elapsedMs: sample.elapsedMs, atMs: now - started - warmupMs });
-          }
-          lastAt = now;
-          lastBytes = totalBytes;
-        }, sampleMs);
-        const lanes = [];
-        for (let i = 0; i < concurrency; i += 1) {
-          lanes.push(
-            downloadLane(base, i, onBytes, controller.signal).catch((err) => {
-              if (err && err.name === "AbortError" && controller.signal.aborted) return;
-              const message = err && err.message ? err.message : "unknown error";
-              laneErrors.push("lane " + i + ": " + message);
-              controller.abort();
-            })
-          );
-        }
-        await sleep(durationMs);
-        controller.abort();
-        await Promise.allSettled(lanes);
-        clearInterval(timer);
-        if (laneErrors.length) {
-          throw new Error("download lanes failed (" + laneErrors.length + "): " + laneErrors.join("; "));
-        }
-        const totalMs = Math.max(1, performance.now() - started);
-        const raw = fmtMbps(Number(totalBytes), totalMs);
-        // The headline must be byte-accurate goodput over the whole timed run.
-        // A trimmed 300 ms sample average remains diagnostic-only because it is
-        // not weighted by each sample's actual duration.
-        const stable = raw;
-        const sampledStable = stableRate(samples);
-        self.postMessage({
-          type: "result",
-          bytes: totalBytes,
-          ms: totalMs,
-          chartDurationMs: Math.max(0, totalMs - warmupMs),
-          raw,
-          stable,
-          sampledStable,
-          samples,
-          sampleDetails,
-          concurrency,
-          laneBytes
-        });
+          try {
+            const stats = receiver.snapshot(performance.now());
+            sampler.accept(stats);
+            if (stats.complete) controller.abort();
+          } catch (error) { fail(error); }
+        }, SPEED_SAMPLE_MS);
+        const deadline = setTimeout(() => controller.abort(), SPEED_DEADLINE_MS);
+        const lanes = Array.from({length: concurrency}, (_, laneId) =>
+          downloadLane(base, laneId, onBytes, controller.signal).catch(error => fail(error, "lane " + laneId)));
+        try { await Promise.all(lanes); }
+        finally { clearInterval(timer); clearTimeout(deadline); }
+        if (errors.length) throw new Error("download failed: " + errors.join("; "));
+        sampler.accept(receiver.finish(performance.now()));
+        postWindowResult(sampler, {concurrency, protocol, ttfbMs});
       }
-      async function download(base, protocol) {
-        const totalDurationMs = 11000;
-        const warmupMs = 1000;
-        const sampleMs = 100;
-        const controller = new AbortController();
-        const startedAt = performance.now();
-        const deadline = startedAt + totalDurationMs;
-        const timer = setTimeout(() => controller.abort(), totalDurationMs);
-        let totalBytes = 0n;
-        let measurementStartAt = null;
-        let measurementStartBytes = 0n;
-        let lastSampleAt = null;
-        let lastSampleBytes = 0n, samplingTimer = null;
-        let ttfbMs = null;
-        let lastWarmupPhaseAt = 0;
-        const samples = [];
-        const sampleDetails = [];
-        const displayHistory = [];
-        try {
-          self.postMessage({ type: "phase", phase: "connecting" });
-          const requestStartedAt = performance.now();
-          const res = await checkedFetch(
-            buildUrl("download-stream?n=" + randomId() + "&maxMs=" + (totalDurationMs + 3000), base),
-            { cache: "no-store", signal: controller.signal }
-          );
-          self.postMessage({ type: "phase", phase: "warmup", warmupElapsedMs: Math.min(warmupMs, performance.now() - startedAt), warmupTotalMs: warmupMs });
-          const reader = res.body.getReader();
-          while (!controller.signal.aborted) {
-            const item = await reader.read();
-            const now = performance.now();
-            if (item.done) {
-              if (now < deadline - 100) throw new Error("download stream ended before timed run completed");
-              break;
-            }
-            if (ttfbMs === null) ttfbMs = now - requestStartedAt;
-            const length = item.value ? item.value.byteLength : 0;
-            if (length <= 0) continue;
-            totalBytes += BigInt(length);
 
-            if (measurementStartAt === null && now - startedAt >= warmupMs) {
-              measurementStartAt = now;
-              measurementStartBytes = totalBytes;
-              lastSampleAt = now;
-              lastSampleBytes = totalBytes;
-              samplingTimer = setInterval(() => {
-                const at = performance.now();
-                const delta = Number(totalBytes - lastSampleBytes);
-                const published = publishThroughputSample(displayHistory, lastSampleAt, at, delta, 1, at - measurementStartAt,
-                  {source:"client-received"});
-                samples.push(published.rawValue);
-                sampleDetails.push({value:published.rawValue,bytes:delta,elapsedMs:published.elapsedMs,atMs:at-measurementStartAt});
-                lastSampleAt = at; lastSampleBytes = totalBytes;
-              }, sampleMs);
-              self.postMessage({ type: "phase", phase: "measuring" });
-            } else if (measurementStartAt === null && now - lastWarmupPhaseAt >= 100) {
-              lastWarmupPhaseAt = now;
-              self.postMessage({ type: "phase", phase: "warmup", warmupElapsedMs: Math.min(warmupMs, now - startedAt), warmupTotalMs: warmupMs });
-            }
-
-          }
-        } catch (err) {
-          if (!err || err.name !== "AbortError" || !controller.signal.aborted) throw err;
-        } finally {
-          clearTimeout(timer); clearInterval(samplingTimer);
-        }
-        const endedAt = performance.now();
-        if (measurementStartAt === null) throw new Error("download stream ended before warmup completed");
-        const measuredBytes = totalBytes - measurementStartBytes;
-        const ms = Math.max(1, endedAt - measurementStartAt);
-        const raw = fmtMbps(Number(measuredBytes), ms);
-        const sampledStable = stableRate(samples);
-        const totalMs = Math.max(1, endedAt - startedAt);
-        const endToEndMbps = fmtMbps(Number(totalBytes), totalMs);
-        self.postMessage({ type: "result", bytes: measuredBytes, ms, raw, stable: raw, sampledStable, samples, sampleDetails,
-          protocol: protocol || "HTTP/2",
-          totalBytes: Number(totalBytes),
-          totalMs,
-          endToEndMbps,
-          bytesReceived: Number(measuredBytes),
-          clientElapsedMs: ms,
-          ttfbMs,
-          transferElapsedMs: ms,
-          rawClientMbps: raw,
-          stableClientMbps: raw,
-          warmupMs,
-          sampleIntervalMs: sampleMs,
-          sampleCount: samples.length,
-        });
-      }
       function supportsRequestStreams() {
         try {
           let duplexAccessed = false;
@@ -4369,95 +4314,45 @@
         }
       }
 
-      function createTimedUploadBody(durationMs, onBytes, onClose) {
-        // This is a reusable buffer, not a file-size limit. Browser backpressure
-        // bounds the queue; do not allocate a whole high-bandwidth test in RAM.
+      function createUploadBody() {
+        // A reusable buffer, not a file-size limit: browser backpressure bounds
+        // the queue, and the receiver window decides when the body ends.
         const chunk = new Uint8Array(256 * 1024);
         for (let i = 0; i < chunk.length; i += 4096) chunk[i] = i % 251;
-        const deadline = performance.now() + durationMs;
-        let owner, closed = false, cancelled = false, bytes = 0n;
-        function finish(cancel = false) {
-          if (closed) return;
-          closed = true;
-          cancelled = cancel;
-          clearTimeout(timer);
-          if (!cancel) owner.close();
-          if (onClose) onClose();
-        }
-        const timer = setTimeout(() => finish(), durationMs);
+        let owner, closed = false, cancelled = false, bytes = 0;
         const body = new ReadableStream({
           start(controller) { owner = controller; },
           pull(controller) {
             if (closed) return;
-            if (performance.now() >= deadline) { finish(); return; }
             controller.enqueue(chunk);
-            bytes += BigInt(chunk.byteLength);
-            if (onBytes) onBytes(chunk.byteLength);
+            bytes += chunk.byteLength;
           },
-          cancel() { finish(true); },
+          cancel() { closed = true; cancelled = true; },
         });
         return { body, get bytes() { return bytes; }, get closed() { return closed; },
-          get cancelled() { return cancelled; }, dispose() { finish(true); } };
+          get cancelled() { return cancelled; }, stop() { if (!closed) { closed = true; owner.close(); } } };
       }
-      function createUploadSampler(started, warmupMs, readBytes, concurrency) {
-        const samples = [], sampleDetails = [], history = [];
-        const sampleMs = 100;
-        let lastAt = null, lastBytes = 0n, timer = null, stopped = false;
-        function sample(final = false) {
-          if (stopped || lastAt === null) return;
-          const now = performance.now();
-          // A tiny last interval (often 0 bytes after EOF) is not a speed sample.
-          if (now - lastAt < (final ? sampleMs / 2 : 1)) return;
-          const bytes = readBytes();
-          const delta = Number(bytes - lastBytes);
-          const published = publishThroughputSample(history, lastAt, now, delta, concurrency, now - started - warmupMs, {source:"browser-queue"});
-          samples.push(published.rawValue);
-          sampleDetails.push({value: published.rawValue, bytes: delta, elapsedMs: published.elapsedMs, atMs: now - started - warmupMs});
-          lastAt = now;
-          lastBytes = bytes;
-        }
-        self.postMessage({type: "phase", phase: "warmup", warmupElapsedMs: 0, warmupTotalMs: warmupMs});
-        const warmupTimer = setTimeout(() => {
-          if (stopped) return;
-          lastAt = performance.now();
-          lastBytes = readBytes();
-          self.postMessage({type: "phase", phase: "measuring"});
-          timer = setInterval(sample, sampleMs);
-        }, warmupMs);
-        return {samples, sampleDetails, stop() {
-          if (stopped) return;
-          sample(true);
-          stopped = true;
-          clearTimeout(warmupTimer);
-          clearInterval(timer);
-        }};
-      }
-      function validateUploadAccounting(json, expectedBytes, measurement = false) {
+      function validateUploadAccounting(json, expectedBytes) {
         if (!json || !Number.isSafeInteger(json.bytes) || json.bytes <= 0
           || json.bytes !== Number(expectedBytes) || !Number.isFinite(json.elapsedMs) || json.elapsedMs <= 0) {
           throw new Error("upload completed without matching server byte accounting");
         }
-        if (measurement && (!Number.isSafeInteger(json.measuredBytes) || json.measuredBytes <= 0
-          || json.measuredBytes > json.bytes || !Number.isFinite(json.measuredElapsedMs) || json.measuredElapsedMs <= 0)) {
-          throw new Error("upload completed without a valid post-warmup server measurement");
-        }
         return json;
       }
-      async function readUploadAccounting(response, expectedBytes, measurement = false) {
+      async function readUploadAccounting(response, expectedBytes) {
         let json;
         try { json = await response.json(); }
         catch { throw new Error("upload server returned invalid accounting JSON"); }
-        return validateUploadAccounting(json, expectedBytes, measurement);
+        return validateUploadAccounting(json, expectedBytes);
       }
-      async function startUploadProgress(base, lanes, warmupMs, chunked = false) {
-        // Optional v1 capability: only a legacy 404 uses the labeled queue estimate.
-        const response = await fetch(buildUrl("upload-progress?lanes=" + lanes + "&warmupMs=" + warmupMs + (chunked ? "&chunked=1" : ""), base),
+      async function startUploadProgress(base, lanes, chunked) {
+        const response = await checkedFetch(buildUrl("upload-progress?lanes=" + lanes + "&warmupMs=" + SPEED_WARMUP_MS
+          + "&windowMs=" + SPEED_WINDOW_MS + (chunked ? "&chunked=1" : ""), base),
           {method: "POST", cache: "no-store", signal: AbortSignal.timeout(3000)});
-        if (response.status === 404) return null;
-        if (!response.ok) throw new Error("upload progress start HTTP " + response.status);
         const session = await response.json();
-        if (session.version !== 1 || !/^[a-f0-9]{32}$/.test(session.id)) throw new Error("invalid upload progress session");
-        if (chunked && session.chunked !== true) return null;
+        if (session.version !== 1 || !/^[a-f0-9]{32}$/.test(session.id) || (chunked && session.chunked !== true)) {
+          throw new Error("invalid upload receipt session");
+        }
         return session;
       }
       async function readUploadProgress(base, session, signal, accept) {
@@ -4484,81 +4379,6 @@
           }
           if (!signal.aborted) throw new Error("upload progress ended without completion");
         } finally { await reader.cancel().catch(() => {}); }
-      }
-      function createServerUploadSampler(concurrency) {
-        const samples = [], sampleDetails = [], history = [];
-        let lastMs = 0, lastBytes = 0, stopped = false, measuring = false;
-        self.postMessage({type:"phase", phase:"warmup"});
-        return {samples, sampleDetails, get durationMs() { return lastMs; }, accept(stats) {
-          if (stopped) return;
-          if (!stats || !Number.isSafeInteger(stats.bytes) || stats.bytes < 0
-              || !Number.isSafeInteger(stats.measuredBytes) || stats.measuredBytes < 0
-              || stats.measuredBytes > stats.bytes || !Number.isFinite(stats.elapsedMs)
-              || !Number.isFinite(stats.measuredElapsedMs) || stats.elapsedMs < 0 || stats.measuredElapsedMs < 0
-              || stats.measuredElapsedMs > stats.elapsedMs || stats.elapsedMs > 180000 || typeof stats.done !== "boolean"
-              || typeof stats.failed !== "boolean" || typeof stats.expired !== "boolean") {
-            throw new Error("invalid upload receipt telemetry");
-          }
-          if (stats.expired || stats.failed) throw new Error("upload receipt telemetry failed or expired");
-          const at = stats.measuredElapsedMs, bytes = stats.measuredBytes;
-          if (at === 0) return;
-          if (at < lastMs || bytes < lastBytes) throw new Error("upload receipt counters regressed");
-          if (at - lastMs < 50) return;
-          if (!measuring) { measuring = true; self.postMessage({type:"phase",phase:"measuring"}); }
-          const referenceValue = concurrency === 1 ? fmtMbps(bytes, at) : fmtMbps(stats.bytes, stats.elapsedMs);
-          const sample = publishThroughputSample(history, lastMs, at, bytes - lastBytes, concurrency, at,
-            {source:"server-received", referenceValue});
-          samples.push(sample.rawValue);
-          sampleDetails.push({value:sample.rawValue,bytes:bytes-lastBytes,elapsedMs:sample.elapsedMs,atMs:at,transferAtMs:stats.elapsedMs,source:"server-received"});
-          lastMs = at; lastBytes = bytes;
-        }, stop() { stopped = true; }};
-      }
-      function monitorUploadProgress(base, progress, signal, sampler) {
-        if (!progress) return Promise.resolve();
-        return readUploadProgress(base, progress, signal, stats => sampler.accept(stats)).catch(error => {
-          if (!signal.aborted) self.postMessage({type:"phase",phase:"telemetry-unavailable",message:error.message});
-        });
-      }
-
-      async function uploadStream(base) {
-        const totalDurationMs = 12000, warmupMs = 2000, sampleMs = 100;
-        const progress = await startUploadProgress(base, 1, warmupMs);
-        const started = performance.now();
-        const controller = new AbortController();
-        let timedOut = false, queuedBytes = 0n;
-        const sampler = progress ? createServerUploadSampler(1) : createUploadSampler(started, warmupMs, () => queuedBytes, 1);
-        const watching = monitorUploadProgress(base, progress, controller.signal, sampler);
-        const transfer = createTimedUploadBody(totalDurationMs, (length) => { queuedBytes += BigInt(length); }, () => {
-          if (!progress) sampler.stop();
-          self.postMessage({type: "phase", phase: "finalizing"});
-        });
-        // Includes a bounded drain/response grace period; never await a server forever.
-        const watchdog = setTimeout(() => { timedOut = true; controller.abort(); }, totalDurationMs + 15000);
-        try {
-          const res = await checkedFetch(buildUrl("upload-stream?n=" + randomId() + "&warmupMs=" + warmupMs + (progress ? "&progressId=" + progress.id : ""), base), {
-            method: "POST", body: transfer.body, duplex: "half", cache: "no-store", signal: controller.signal,
-          });
-          if (!transfer.closed || transfer.cancelled) throw new Error("upload server replied before the stream completed");
-          const json = await readUploadAccounting(res, queuedBytes, true);
-          const clientElapsedMs = Math.max(1, performance.now() - started);
-          await Promise.race([watching, sleep(200)]);
-          const stable = fmtMbps(json.measuredBytes, json.measuredElapsedMs);
-          self.postMessage({type: "result", bytes: json.measuredBytes, ms: json.measuredElapsedMs,
-            raw: stable, stable, sampledStable: stableRate(sampler.samples), samples: sampler.samples,
-            sampleDetails: sampler.sampleDetails, totalBytes: json.bytes, totalMs: json.elapsedMs,
-            endToEndMbps: fmtMbps(json.bytes, json.elapsedMs), clientBytesQueued: Number(queuedBytes),
-            clientElapsedMs, rawClientQueuedMbps: fmtMbps(Number(queuedBytes), clientElapsedMs),
-            serverBytesReceived: json.measuredBytes, serverElapsedMs: json.measuredElapsedMs,
-            rawServerReceivedMbps: stable, warmupMs, sampleIntervalMs: sampleMs, sampleCount: sampler.samples.length});
-        } catch (error) {
-          if (timedOut) throw new Error("upload timed out while draining or waiting for server accounting");
-          throw error;
-        } finally {
-          clearTimeout(watchdog);
-          controller.abort();
-          transfer.dispose();
-          sampler.stop();
-        }
       }
 
       function createChunkPayload() {
@@ -4604,133 +4424,72 @@
           try { xhr.send(payload); } catch (error) { finish(error); }
         });
       }
-      async function uploadChunkLoop(base) {
-        const durationMs = 10000;
-        const payload = createChunkPayload();
-        const samples = [];
-        let totalBytes = 0n;
-        const started = performance.now();
-        const deadline = started + durationMs;
-
-        while (performance.now() < deadline) {
-          const t0 = performance.now();
-          const res = await checkedFetch(buildUrl("upload?n=" + randomId(), base), {
-              method: "POST",
-              body: payload,
-              cache: "no-store",
-            });
-            await readUploadAccounting(res, payload.size);
-          const ms = performance.now() - t0;
-          totalBytes += BigInt(payload.size);
-          const mbps = fmtMbps(payload.size, ms);
-          samples.push(mbps);
-          self.postMessage({ type: "sample", value: mbps, atMs: performance.now() - started });
-        }
-
-        const totalMs = Math.max(1, performance.now() - started);
-        const raw = fmtMbps(Number(totalBytes), totalMs);
-        const stable = raw;
-        const sampledStable = stableRate(samples);
-
-        self.postMessage({
-          type: "result",
-          bytes: totalBytes,
-          ms: totalMs,
-          raw,
-          stable,
-          sampledStable,
-          samples,
+      async function uploadLane(base, laneId, signal, transfer, progress) {
+        const res = await checkedFetch(buildUrl("upload-stream?n=" + randomId() + "&lane=" + laneId + "&progressId=" + progress.id, base), {
+          method: "POST", body: transfer.body, cache: "no-store", signal, duplex: "half",
         });
+        if (!transfer.closed || transfer.cancelled) throw new Error("upload lane replied before its stream completed");
+        const json = await readUploadAccounting(res, transfer.bytes);
+        return {laneId, queuedBytes: transfer.bytes, serverBytes: json.bytes};
       }
-
-      async function uploadLane(base, laneId, durationMs, signal, onQueuedBytes, onClose, progress) {
-        const transfer = createTimedUploadBody(durationMs, (length) => onQueuedBytes(laneId, length), onClose);
-        try {
-          const res = await checkedFetch(buildUrl("upload-stream?warmupMs=0&n=" + randomId() + "&lane=" + laneId + (progress ? "&progressId=" + progress.id : ""), base), {
-            method: "POST", body: transfer.body, cache: "no-store", signal, duplex: "half",
-          });
-          if (!transfer.closed || transfer.cancelled) throw new Error("upload lane replied before its stream completed");
-          const json = await readUploadAccounting(res, transfer.bytes);
-          return {laneId, queuedBytes: transfer.bytes, serverBytes: BigInt(json.bytes), serverElapsedMs: json.elapsedMs};
-        } finally { transfer.dispose(); }
-      }
-      async function uploadChunkLane(base, laneId, durationMs, signal, onBytes, payload, progress) {
-        let bytes = 0n;
-        const deadline = performance.now() + durationMs;
-        while (performance.now() < deadline && !signal.aborted) {
-          const json = await uploadChunkRequest(buildUrl("upload?n=" + randomId() + "&lane=" + laneId + (progress ? "&progressId=" + progress.id : ""), base),
-            payload, signal, (delta) => onBytes(laneId, delta));
-          bytes += BigInt(json.bytes);
+      async function uploadChunkLane(base, laneId, signal, stopped, payload, progress) {
+        let bytes = 0;
+        while (!stopped() && !signal.aborted) {
+          const json = await uploadChunkRequest(buildUrl("upload?n=" + randomId() + "&lane=" + laneId + "&progressId=" + progress.id, base),
+            payload, signal, () => {});
+          bytes += json.bytes;
         }
         if (signal.aborted) throw new DOMException("upload aborted", "AbortError");
         return {laneId, serverBytes: bytes};
       }
-      async function runUploadLanes(base, concurrency, chunked) {
-        const durationMs = 10000, warmupMs = 500;
-        const progress = await startUploadProgress(base, concurrency, warmupMs, chunked);
-        const started = performance.now();
-        const controller = new AbortController();
-        let totalBytes = 0n, producers = concurrency, timedOut = false;
-        const chunkPayload = chunked ? createChunkPayload() : null;
-        const sampler = progress ? createServerUploadSampler(concurrency) : createUploadSampler(started, warmupMs, () => totalBytes, concurrency);
-        const watching = monitorUploadProgress(base, progress, controller.signal, sampler);
-        const onBytes = (_lane, length) => { totalBytes += BigInt(length); };
-        const finish = () => {
-          if (!progress) sampler.stop();
-          self.postMessage({type: "phase", phase: "finalizing"});
-        };
-        const onClose = () => { if (--producers === 0) finish(); };
-        const endSampler = chunked ? setTimeout(finish, durationMs) : null;
-        const watchdog = setTimeout(() => { timedOut = true; controller.abort(); }, durationMs + 15000);
+      async function upload(base, concurrency) {
+        const chunked = !supportsRequestStreams();
+        if (chunked && concurrency === 1) throw new Error("This browser does not support strict single-stream upload");
+        self.postMessage({type: "phase", phase: "connecting"});
+        const progress = await startUploadProgress(base, concurrency, chunked);
+        const controller = new AbortController(), sampler = createWindowSampler(concurrency, "server-received");
+        const transfers = chunked ? [] : Array.from({length: concurrency}, () => createUploadBody());
+        let stopped = false, telemetryError = null, timedOut = false;
+        const stop = () => { if (!stopped) { stopped = true; transfers.forEach(transfer => transfer.stop()); } };
+        const watching = readUploadProgress(base, progress, controller.signal, stats => {
+          sampler.accept(stats);
+          if (stats.complete) stop();
+        }).catch(error => {
+          if (controller.signal.aborted) return;
+          telemetryError = error;
+          controller.abort();
+        });
+        const deadline = setTimeout(stop, SPEED_DEADLINE_MS);
+        const watchdog = setTimeout(() => { timedOut = true; controller.abort(); }, SPEED_DEADLINE_MS + 15000);
+        const payload = chunked ? createChunkPayload() : null;
         const lanes = Array.from({length: concurrency}, (_, laneId) => chunked
-          ? uploadChunkLane(base, laneId, durationMs, controller.signal, onBytes, chunkPayload, progress)
-          : uploadLane(base, laneId, durationMs, controller.signal, onBytes, onClose, progress));
+          ? uploadChunkLane(base, laneId, controller.signal, () => stopped, payload, progress)
+          : uploadLane(base, laneId, controller.signal, transfers[laneId], progress));
         try {
           const results = await Promise.all(lanes);
-          const totalMs = Math.max(1, performance.now() - started);
-          if (progress && chunked) {
-            sampler.stop();
-            // Closing telemetry is not part of the throughput denominator.
-            try {
-              await checkedFetch(buildUrl("upload-progress?id="+progress.id+"&finish=1",base),
-                {method:"POST",cache:"no-store",signal:controller.signal});
-            } catch (error) {
-              self.postMessage({type:"phase",phase:"telemetry-unavailable",message:error.message});
-            }
+          if (chunked) {
+            await checkedFetch(buildUrl("upload-progress?id=" + progress.id + "&finish=1", base),
+              {method: "POST", cache: "no-store", signal: controller.signal});
           }
-          await Promise.race([watching, sleep(200)]);
-          const bytes = results.reduce((sum, lane) => sum + lane.serverBytes, 0n);
-          const stable = fmtMbps(Number(bytes), totalMs);
-          self.postMessage({type: "result", bytes, ms: totalMs, raw: stable, stable,
-            chartDurationMs: progress ? sampler.durationMs : Math.max(0, totalMs - warmupMs),
-            sampledStable: stableRate(sampler.samples), samples: sampler.samples, sampleDetails: sampler.sampleDetails,
-            concurrency, lanes: results, fallback: chunked});
+          await Promise.race([watching, sleep(3000)]);
+          if (telemetryError) throw telemetryError;
+          const final = sampler.final, serverBytes = results.reduce((sum, lane) => sum + lane.serverBytes, 0);
+          if (final && final.done && final.bytes !== serverBytes) throw new Error("upload receipts disagree with request accounting");
+          postWindowResult(sampler, {concurrency, protocol: concurrency === 1 ? "HTTP/2" : undefined, lanes: results, fallback: chunked});
         } catch (error) {
           controller.abort();
           await Promise.allSettled(lanes);
-          if (timedOut) throw new Error("upload lanes timed out while waiting for server accounting");
+          if (telemetryError) throw telemetryError;
+          if (timedOut) throw new Error("upload timed out while waiting for server accounting");
           throw error;
         } finally {
+          clearTimeout(deadline);
           clearTimeout(watchdog);
-          clearTimeout(endSampler);
           controller.abort();
-          sampler.stop();
+          stop();
         }
-      }
-      async function uploadChunkMulti(base, concurrency) {
-        return runUploadLanes(base, concurrency, true);
-      }
-      async function uploadMulti(base, concurrency) {
-        if (concurrency <= 1) return upload(base);
-        return supportsRequestStreams() ? runUploadLanes(base, concurrency, false) : uploadChunkMulti(base, concurrency);
       }
 
-      async function upload(base) {
-        if (!supportsRequestStreams()) {
-          throw new Error("This browser does not support strict single-stream upload");
-        }
-        return uploadStream(base);
-      }
       async function smallDownload(base) {
         const sizes = [
         { label: "10 KiB", bytes: 10 * 1024, rounds: 6 },
@@ -4776,9 +4535,11 @@
         const concurrency = normalizeConcurrency(task.concurrency);
         let p;
         if (task.kind === "upload") {
-          p = uploadMulti(task.base || "", concurrency);
+          p = upload(task.base || "", concurrency);
         } else if (task.kind === "download") {
-          p = downloadMulti(task.base || "", concurrency, task.singleStreamBase, task.singleStreamProtocol);
+          p = concurrency === 1
+            ? download(task.singleStreamBase || task.base || "", 1, task.singleStreamProtocol || "HTTP/2")
+            : download(task.base || "", concurrency);
         } else if (task.kind === "small-download") {
           p = smallDownload(task.base || "");
         } else {
@@ -4835,38 +4596,24 @@
             return;
           }
           const msg = ev.data || {};
-          if (msg.type === "phase" && kind === "upload") {
-            if (msg.phase === "telemetry-unavailable") {
-              $("uploadMeta").textContent = "Live server receipts unavailable; final byte accounting is still required.";
-            } else if (msg.phase === "finalizing") {
-              $("uploadMeta").textContent = "Finishing upload; waiting for server byte accounting...";
-            } else if (msg.phase === "warmup") {
-              $("upload").textContent = "Warming up...";
-              $("uploadMeta").textContent = selectedSpeedThreads() === 1
-                ? "Upload warm-up; excluded from the single-stream final measurement."
-                : "Starting receipt sampling; the final multi-stream result uses the whole run.";
-            } else if (msg.phase === "measuring") {
-              $("upload").textContent = "Measuring...";
-              $("uploadMeta").textContent = "Collecting 100 ms receipt samples...";
-            }
-          } else if (msg.type === "phase" && kind === "download") {
+          if (msg.type === "phase" && (kind === "download" || kind === "upload")) {
             if (msg.phase === "connecting") {
-              $("download").textContent = "Starting...";
-              $("downloadMeta").textContent = "Connecting to " + selectedNode.label + "...";
+              $(kind).textContent = "Starting...";
+              $(kind + "Meta").textContent = "Connecting to " + selectedNode.label + "...";
             } else if (msg.phase === "warmup") {
               const elapsed = Math.max(0, Number(msg.warmupElapsedMs) || 0) / 1000;
               const total = Math.max(0.1, Number(msg.warmupTotalMs) || 0) / 1000;
-              $("download").textContent = "Warming up...";
-              $("downloadMeta").textContent = "Warm-up " + Math.min(elapsed, total).toFixed(1) + " / " + total.toFixed(1) + " s; excluded from final measurement.";
+              $(kind).textContent = "Warming up...";
+              $(kind + "Meta").textContent = "Warm-up " + Math.min(elapsed, total).toFixed(1) + " / " + total.toFixed(1) + " s; excluded from final measurement.";
             } else if (msg.phase === "measuring") {
-              $("download").textContent = "Measuring...";
-              $("downloadMeta").textContent = "Collecting the first 100 ms measurement window...";
+              $(kind).textContent = "Measuring...";
+              $(kind + "Meta").textContent = "Collecting the first 100 ms measurement window...";
             }
           } else if (msg.type === "sample") {
             addPoint(kind, msg.value, color);
             if (kind === "download" || kind === "upload") {
               addSpeedSample(kind, msg);
-              const source = msg.source === "server-received" ? "Server received" : kind === "upload" ? "Browser send estimate" : "Client received";
+              const source = msg.source === "server-received" ? "Server received" : "Browser received";
               const description=source + "; 0.5 s rolling display; 100 ms raw samples.";
               if ($(kind + "Meta").textContent!==description) $(kind + "Meta").textContent=description;
             }
@@ -4924,41 +4671,36 @@
     }
     async function downloadTest(session) {
       if (!isCurrentSession(session)) return;
-      setPhase("Download", "Worker stream test, measured timed throughput.");
-      $("download").textContent = "Starting...";
-      $("downloadMeta").textContent = "Connecting to " + selectedNode.label + "...";
+      setPhase("Download", "1 s warm-up, then a 10 s window counted by the browser.");
       if (new URLSearchParams(location.search).get("testMode") === "local") {
         await new Promise((resolve) => setTimeout(resolve, 120));
         if (!isCurrentSession(session)) return;
       }
       const result = await runSpeedWorker("download", "#2563eb", session);
       if (!isCurrentSession(session)) return;
-      state.speedDiagnostics.download = result.sampleDetails || [];
-      const mbps = result.stable;
-      state.download = mbps;
-      $("download").textContent = mbps.toFixed(2);
-      const streams = result.concurrency || 1;
-      const streamLabel = streams + " stream" + (streams === 1 ? "" : "s");
-      const protocol = result.protocol ? "; " + result.protocol : "";
-      const endToEnd = Number.isFinite(result.endToEndMbps) ? "; end-to-end " + result.endToEndMbps.toFixed(2) + " Mbps" : "";
-      const ttfb = Number.isFinite(result.ttfbMs) ? "; TTFB " + result.ttfbMs.toFixed(1) + " ms" : "";
-      $("downloadMeta").textContent = "Final; " + streamLabel + protocol + "; steady " + mbps.toFixed(2) + " Mbps; measured " + (Number(result.bytes) / 1024 / 1024).toFixed(1) + " MiB in " + (result.ms / 1000).toFixed(2) + " s" + endToEnd + ttfb;
-      log("Download " + streamLabel + protocol + " steady " + mbps.toFixed(2) + " Mbps; sample-trim " + (Number.isFinite(result.sampledStable) ? result.sampledStable.toFixed(2) : "--") + " Mbps" + endToEnd + ttfb);
+      showSpeedResult("download", result);
     }
     async function uploadTest(session) {
       if (!isCurrentSession(session)) return;
-      setPhase("Upload", "Strict single-stream upload with server byte accounting.");
+      setPhase("Upload", "1 s warm-up, then a 10 s window counted by the server.");
       const result = await runSpeedWorker("upload", "#059669", session);
       if (!isCurrentSession(session)) return;
-      state.speedDiagnostics.upload = result.sampleDetails || [];
+      showSpeedResult("upload", result);
+    }
+    function showSpeedResult(kind, result) {
+      state.speedDiagnostics[kind] = result.sampleDetails || [];
       const mbps = result.stable;
-      state.upload = mbps;
-      $("upload").textContent = mbps.toFixed(2);
+      state[kind] = mbps;
+      $(kind).textContent = mbps.toFixed(2);
       const streams = result.concurrency || 1;
       const streamLabel = streams + " stream" + (streams === 1 ? "" : "s");
-      const endToEnd = Number.isFinite(result.endToEndMbps) ? "; end-to-end " + result.endToEndMbps.toFixed(2) + " Mbps" : "";
-      $("uploadMeta").textContent = streamLabel + "; steady " + mbps.toFixed(2) + " Mbps; measured " + (Number(result.bytes) / 1024 / 1024).toFixed(1) + " MiB in " + (result.ms / 1000).toFixed(2) + " s" + endToEnd;
-      log("Upload " + streamLabel + " steady " + mbps.toFixed(2) + " Mbps; sample-trim " + (Number.isFinite(result.sampledStable) ? result.sampledStable.toFixed(2) : "--") + " Mbps" + endToEnd);
+      const protocol = result.protocol ? "; " + result.protocol : "";
+      const endToEnd = "; end-to-end " + result.endToEndMbps.toFixed(2) + " Mbps";
+      const ttfb = Number.isFinite(result.ttfbMs) ? "; TTFB " + result.ttfbMs.toFixed(1) + " ms" : "";
+      $(kind + "Meta").textContent = streamLabel + protocol + "; steady " + mbps.toFixed(2) + " Mbps; measured "
+        + (Number(result.bytes) / 1024 / 1024).toFixed(1) + " MiB in " + (result.ms / 1000).toFixed(2) + " s" + endToEnd + ttfb;
+      log(kind[0].toUpperCase() + kind.slice(1) + " " + streamLabel + protocol + " steady " + mbps.toFixed(2) + " Mbps; sample-trim "
+        + (Number.isFinite(result.sampledStable) ? result.sampledStable.toFixed(2) : "--") + " Mbps" + endToEnd + ttfb);
     }
     function startTimer(intervalMs = 100) {
       state.start = performance.now();

@@ -5,6 +5,9 @@
 JitterCrest is a self-hosted network quality tool. Its maintained C++20 backend
 provides bounded HTTP streaming, upload progress and native WebRTC DataChannel probes. The browser renders download /
 upload charts and RTT, jitter, percentile, loss, ordering and stability reports.
+Download and upload share one receiver-side measurement: a 1 s warm-up after the
+receiver's first byte, then an exact 10 s window sampled every 100 ms. The browser
+counts downloads; the node counts uploads.
 Building and running the active service requires neither Rust nor Node/npm.
 
 ## Layout

@@ -44,5 +44,19 @@ int main() {
     registry.finish("two", chunks);
     const auto end = registry.get({.owner = "two", .id = chunks})->snapshot();
     require(end["bytes"] == 204800 && end["done"] && !end["failed"].get<bool>());
+    const auto timed =
+        registry.create("three", {.warmup_ms = 0, .window_ms = 50, .maximum = 3, .per_ip = 1});
+    {
+        auto receipt = registry.attach("three", timed, 0);
+        receipt.received(100);
+        auto live = registry.get({.owner = "three", .id = timed})->snapshot();
+        require(live["measuredBytes"] == 100 && !live["complete"].get<bool>());
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        receipt.received(200);
+        receipt.success();
+    }
+    const auto window = registry.get({.owner = "three", .id = timed})->snapshot();
+    require(window["bytes"] == 300 && window["measuredBytes"] == 100 && window["complete"] &&
+            window["measuredElapsedMs"] == 50.0 && window["elapsedMs"] >= 80.0);
     std::cout << "owned progress receipts and concurrent lanes passed\n";
 }

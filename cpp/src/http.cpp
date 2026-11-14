@@ -1095,7 +1095,9 @@ awaitable<void> Session::progress() {
                     static_cast<std::uint8_t>(*lanes),
                     reusable,
                     bounded(query(target_, "warmupMs"),
-                            {.fallback = 2000, .minimum = 0, .maximum = 5000}),
+                            {.fallback = 1000, .minimum = 0, .maximum = 5000}),
+                    bounded(query(target_, "windowMs"),
+                            {.fallback = 10000, .minimum = 1000, .maximum = 30000}),
                     Millis(cfg.upload_ms + 10000),
                     static_cast<std::size_t>(cfg.max_active_global),
                     static_cast<std::size_t>(cfg.max_active_per_ip)};
