@@ -89,6 +89,19 @@ At multi-Gbit/s a 12-second single-stream upload exceeds the default 2 GiB
 `MAX_STREAM_UPLOAD`, `UPLOAD_BYTE_BUDGET_PER_IP` and
 `DOWNLOAD_BYTE_BUDGET_PER_IP` to match the node's capacity.
 
+## Generated setups
+
+`cpp/deploy/quickstart.py` and the command-based enrollment installer configure
+the listener by default (port 8444, `tls_port` in the wizard). Caddy keeps
+obtaining the certificate on 80/443 and serves the page, `/admin` and HTTP/1.1
+endpoints; every node address in the picker, including the main server's own
+entry, is the listener origin. A root systemd timer
+(`jittercrest-<id>-tls-sync.timer`, every 10 minutes) copies the certificate from
+Caddy's storage into a directory readable only by the service user: `tls/` in
+the generated directory, or `/opt/jittercrest-agents/<id>/tls`, mounted read-only
+into the agent container. The installer waits for the first certificate, starts
+the agent, and activates the node only after HTTPS and HTTP/2 answer.
+
 ## Validation
 
 CTest `tls_http2_edge_relay` starts the HTTP server and the listener with a

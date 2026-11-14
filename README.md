@@ -63,14 +63,18 @@ Open **Manage nodes** in the picker to access `/admin` on the main host.
    Read the administrator token locally with `grep '^SPEEDTEST_ADMIN_TOKEN=' runtime.env`.
 2. Log in to `/admin`. Choose **接入节点**, enter an ID, display name, the agent's
    HTTPS origin, public UDP IPv4 and capability, then generate the install command.
+   An origin without a port uses the built-in TLS listener port 8444.
    The single-use enrollment key expires after **one hour**.
 3. Copy the command to the corresponding Linux VPS. It claims the enrollment,
    builds/tests a UI-free C++ Docker image from the main server's allowlisted
-   source bundle, starts the agent and Caddy, verifies HTTPS and activates the node.
+   source bundle, lets Caddy obtain the certificate on 80/443, installs a systemd
+   timer that copies it every 10 minutes, starts the agent with its built-in TLS
+   listener, verifies HTTPS and HTTP/2 and activates the node.
    The node then appears in the main page's picker without a main-server restart.
 
 Use a dedicated Linux VPS with Python 3, curl, sudo/root access, free TCP ports
-80/443 and reachable public UDP. If Docker is missing, the installer installs
+80/443 and the listener port (default 8444), and reachable public UDP. If Docker
+is missing, the installer installs
 `docker.io` with apt on Debian/Ubuntu. Other distributions require an existing
 working Docker installation. Domain names must resolve to the VPS. The installer
 uses Caddy 2.11.9, including an explicit ACME `shortlived` profile for IP addresses;
@@ -95,7 +99,9 @@ management endpoints are unavailable. See [security](SECURITY.md).
 Installer state lives in `/opt/jittercrest-agents/<id>/`; rerun the same command
 to resume an interrupted installation. The backend runs as a non-root user in a
 read-only container. Removing a node revokes its controller credential and removes
-it from the picker; stop its VPS containers separately when retiring the service.
+it from the picker; when retiring the service, stop the containers
+`jittercrest-<id>` and `jittercrest-<id>-tls` and disable
+`jittercrest-<id>-tls-sync.timer` on the VPS.
 
 ## Manual guided setup (Linux)
 
@@ -105,13 +111,16 @@ the running C++ service does not require Python. On Windows use Linux/WSL.
 
 1. On each agent host, obtain this repository and run `python3 cpp/deploy/quickstart.py`.
    Choose **2** for a data agent or **3** for a probe-only agent; enter its HTTPS
-   origin, the main page HTTPS origin, an ID, and the requested local settings.
+   origin, the main page HTTPS origin, an ID, the built-in TLS listener port
+   (default 8444) and the requested local settings.
    Probe-only agents require their public UDP IPv4. The output directory must be new.
    Choose a dependency prefix writable by the build user (the default `/opt` path
    may require administrator setup).
 2. In the generated directory, run `./build.sh --bootstrap` to build the pinned
    transport and service, or `./build.sh` to reuse the configured dependency prefix.
-   Run `./run.sh` in the foreground. Transfer the generated `node.json` securely to
+   Once Caddy serves `Caddyfile.example` and has issued the certificate, run
+   `sudo ./sync-cert.sh` to copy it into `tls/`, then run `./run.sh` in the
+   foreground. Transfer the generated `node.json` securely to
    the main host; it contains public node addressing, not a password.
 3. On the main host, run the same wizard, choose **1**, and import the agent
    `node.json` files when prompted. Build and run the generated main directory in
@@ -125,6 +134,10 @@ the running C++ service does not require Python. On Windows use Linux/WSL.
    refuses non-canonical hand-edited configurations. Once the main registry has
    started, manage nodes in `/admin`.
 
+In generated setups Caddy obtains the certificate and serves the page, `/admin`
+and HTTP/1.1 endpoints; every node address in the picker, including the main
+server's own entry, is its built-in TLS listener, for example
+`https://main.example.com:8444`. Open that TCP port in the firewall.
 Review `Caddyfile.example` and configure a trusted HTTPS reverse proxy and firewall
 separately. The wizard does not install or edit Caddy, obtain certificates, open
 ports, or deploy remotely. IP-based HTTPS requires a suitable trusted IP
@@ -134,7 +147,9 @@ directly to the agents. Manually configured agents have no enrollment heartbeat.
 An optional `service.example` and `install-service.sh` are generated. Before
 running `sudo ./install-service.sh`, review both, create the selected non-root user,
 and ensure it can traverse and read the generated directory and execute its
-scripts and binary. The installer refuses to replace an existing unit. Use
+scripts and binary. It copies the certificate once, then installs the service and
+`jittercrest-<id>-tls-sync.timer`, which refreshes the copy every 10 minutes. The
+installer refuses to replace an existing unit. Use
 `python3 cpp/deploy/quickstart.py --help` for non-interactive JSON options. For
 example, save the following as `agent-config.json` on the agent host, then run
 `python3 cpp/deploy/quickstart.py --config agent-config.json --output /path/to/new-agent`:
@@ -142,7 +157,7 @@ example, save the following as `agent-config.json` on the agent host, then run
 ```json
 {"role":"data", "id":"node-1", "label":"Node 1",
  "public_origin":"https://node.example.com", "main_origin":"https://main.example.com",
- "port":32132, "native_prefix":"/opt/jittercrest-deps", "service_user":"jittercrest"}
+ "port":32132, "tls_port":8444, "native_prefix":"/opt/jittercrest-deps", "service_user":"jittercrest"}
 ```
 
 Replace the example addresses and paths. `service_user` must already exist if
@@ -163,7 +178,8 @@ Caddy) therefore cap a 54 ms path near 155 Mbit/s. For speed-test traffic, enabl
 the built-in TLS listener (`SPEEDTEST_TLS_PORT`, `SPEEDTEST_TLS_CERT`,
 `SPEEDTEST_TLS_KEY`), which advertises 32 MiB stream and 64 MiB connection
 windows, and use that origin as the node `base`. See the
-[TLS HTTP/2 listener notes](cpp/docs/tls-edge.md).
+[TLS HTTP/2 listener notes](cpp/docs/tls-edge.md). The quickstart wizard and
+command-based enrollment configure it by default.
 
 No credentials, real deployment configuration, binary releases, backups or raw
 operational captures belong in this repository. See [security](SECURITY.md) and

@@ -73,7 +73,7 @@
   <div id="createNotice" class="dialog-notice" role="alert"></div>
   <form id="createForm">
     <div class="columns"><div><label for="nodeId">节点 ID</label><input id="nodeId" required pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="tokyo-1" maxlength="64"></div><div><label for="nodeLabel">显示名称</label><input id="nodeLabel" required maxlength="80" placeholder="Tokyo"></div></div>
-    <label for="nodeBase">后端 HTTPS 地址</label><input id="nodeBase" type="url" required placeholder="https://node.example.com 或 https://公网IP">
+    <label for="nodeBase">后端 HTTPS 地址</label><input id="nodeBase" type="url" required placeholder="https://node.example.com:8444 或 https://公网IP:8444">
     <div class="columns"><div><label for="nodeIp">公网 UDP IPv4</label><input id="nodeIp" required inputmode="decimal" placeholder="VPS 公网 IPv4"></div><div><label for="nodeRole">能力</label><select id="nodeRole"><option value="data">测速 + 探针</option><option value="probe">仅探针</option></select></div></div>
     <p>适用于空闲的 Linux VPS。安装命令使用 Docker，需要 TCP 80/443 和公网 UDP 可达；域名需解析至该 VPS。</p>
     <div class="actions"><button id="generate" type="submit">生成接入命令</button></div>
@@ -123,7 +123,7 @@
       const name = document.createElement("input"); name.value = node.label; name.maxLength = 80; name.setAttribute("aria-label",node.id + " 显示名称");
       const save = document.createElement("button"); save.textContent = "保存名称"; save.className = "secondary";
       save.onclick = () => guarded(async () => { await api("/api/admin/node", {id:node.id,action:"update",label:name.value,enabled:node.enabled}); await refresh(); }); actions.append(name,save);
-      if (node.base) {
+      if (node.base && node.id !== "local") {
         const toggle = document.createElement("button"); toggle.className = "secondary"; toggle.textContent = node.enabled ? "停用" : "启用";
         toggle.onclick = () => guarded(async () => { await api("/api/admin/node", {id:node.id,action:"update",label:node.label,enabled:!node.enabled}); await refresh(); }); actions.append(toggle);
         if (node.managed) { const reset = document.createElement("button"); reset.className = "secondary"; reset.textContent = "重置 key"; reset.onclick = () => { if(confirm("重置将撤销现有接入凭据，节点需重新安装接入。继续？")) guarded(async () => { showCommand(await api("/api/admin/node",{id:node.id,action:"reset"})); await refresh(); }); }; actions.append(reset); }
@@ -141,7 +141,9 @@
   $("add").onclick = () => $("createDialog").showModal();
   $("closeCreate").onclick = () => $("createDialog").close();
   $("closeCommand").onclick = () => { $("commandDialog").close(); $("command").value = ""; $("joinKey").textContent = ""; };
-  $("createForm").onsubmit = e => { e.preventDefault(); guarded(async () => { const result = await api("/api/admin/enrollments", {id:$("nodeId").value.trim(),label:$("nodeLabel").value.trim(),base:$("nodeBase").value.trim().replace(/\/$/,""),udp4:$("nodeIp").value.trim(),role:$("nodeRole").value}); showCommand(result); $("createForm").reset(); await refresh(); }); };
+  // Enrolled agents serve speed traffic on the built-in TLS listener (default 8444).
+  function agentBase(value) { const url = new URL(value.trim()); if (!url.port) url.port = "8444"; return url.origin; }
+  $("createForm").onsubmit = e => { e.preventDefault(); guarded(async () => { const result = await api("/api/admin/enrollments", {id:$("nodeId").value.trim(),label:$("nodeLabel").value.trim(),base:agentBase($("nodeBase").value),udp4:$("nodeIp").value.trim(),role:$("nodeRole").value}); showCommand(result); $("createForm").reset(); await refresh(); }); };
   $("copy").onclick = () => guarded(async () => { await navigator.clipboard.writeText($("command").value); $("copy").textContent = "已复制"; });
   setInterval(() => { if(token && !busy && !document.hidden && !$("createDialog").open && !$("commandDialog").open && !$("nodeList").contains(document.activeElement)) guarded(refresh); },30000);
 </script>

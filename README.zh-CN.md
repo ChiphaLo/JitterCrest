@@ -26,13 +26,15 @@ JitterCrest 是一个自托管的浏览器测速与网络质量分析项目。C+
    在主端本地执行 `grep '^SPEEDTEST_ADMIN_TOKEN=' runtime.env` 查看令牌。
 2. 打开 `/admin` 登录，点击**接入节点**，填写 ID、名称、后端 HTTPS 地址、公网
    UDP IPv4 及“测速 + 探针”或“仅探针”能力，生成安装命令与一次性 key。
+   后端地址未写端口时自动使用内置 TLS 测速入口端口 8444。
    key 有效期为 **1 小时**，仅可领取一次。
 3. 将命令复制到相应 Linux VPS 执行。安装器自动领取配置、从主端下载限定范围的
-   C++ 源码、构建并测试无网页 Docker 镜像、启动后端及 Caddy、验证 HTTPS 后激活节点。
+   C++ 源码、构建并测试无网页 Docker 镜像、由 Caddy 在 80/443 签发证书、安装每 10 分钟
+   复制证书的 systemd 定时器、启动带内置 TLS 入口的后端、验证 HTTPS 与 HTTP/2 后激活节点。
    主端无需重启，打开节点选择器即可看到新节点。
 
 推荐独立、端口空闲的 Linux VPS，预先准备 Python 3、curl、sudo/root 权限，
-开放 TCP 80/443 和公网 UDP。缺少 Docker 时，Debian/Ubuntu 自动通过 apt 安装
+开放 TCP 80/443、测速入口端口（默认 8444）和公网 UDP。缺少 Docker 时，Debian/Ubuntu 自动通过 apt 安装
 `docker.io`；其他发行版需先安装可运行的 Docker。域名需解析至 VPS。安装器使用
 Caddy 2.11.9；IP 地址显式配置 ACME `shortlived` 证书。证书签发、服务商 HTTPS
 策略及 NAT/防火墙连通性须满足要求；端口已有服务时安装器会停止并保留原服务。
@@ -50,7 +52,8 @@ Caddy 2.11.9；IP 地址显式配置 ACME `shortlived` 证书。证书签发、�
 
 VPS 安装状态保存于 `/opt/jittercrest-agents/<id>/`；中断后可重跑原命令续接。
 C++ 后端在非 root、只读容器内运行。后台移除节点会撤销其接入凭据并从前台列表移除；
-退役 VPS 上的容器需由运营方另行停止。详见[安全说明](SECURITY.md)。
+退役 VPS 时需由运营方另行停止容器 `jittercrest-<id>`、`jittercrest-<id>-tls`，并停用
+`jittercrest-<id>-tls-sync.timer`。详见[安全说明](SECURITY.md)。
 
 ## 手动快速搭建（Linux）
 
@@ -60,10 +63,11 @@ C++ 后端在非 root、只读容器内运行。后台移除节点会撤销其�
 
 1. 在每台后端服务器取得本仓库后运行 `python3 cpp/deploy/quickstart.py`，
    选择 **2 数据节点**或 **3 仅探针节点**，输入本节点 HTTPS 地址、主网页
-   HTTPS 地址、节点 ID 等信息。仅探针节点必须填写公网 UDP IPv4。原生依赖目录须对构建用户可写；默认
+   HTTPS 地址、节点 ID、内置 TLS 测速入口端口（默认 8444）等信息。仅探针节点必须填写公网 UDP IPv4。原生依赖目录须对构建用户可写；默认
    `/opt` 路径可能需要管理员预先设置。
 2. 进入生成目录，运行 `./build.sh --bootstrap` 构建固定版本的原生依赖和
-   服务；已有对应依赖时运行 `./build.sh`。运行 `./run.sh` 前台启动。
+   服务；已有对应依赖时运行 `./build.sh`。按 `Caddyfile.example` 配置 Caddy 并签发证书后，
+   运行 `sudo ./sync-cert.sh` 把证书复制到 `tls/`，再运行 `./run.sh` 前台启动。
    将生成的 `node.json` 通过安全渠道复制到主端；文件包含节点地址但不含密码。
 3. 在主端运行同一向导，选择 **1 主节点**，按提示导入各后端 `node.json`，
    然后同样构建和启动。如果主端已由向导生成，可追加节点：
@@ -75,14 +79,17 @@ C++ 后端在非 root、只读容器内运行。后台移除节点会撤销其�
    修改前会备份 `runtime.env` 并原子替换；手动更改过的非标准配置会被拒绝。
    此命令用于主端注册表首次启动前的导入；注册表启用后通过 `/admin` 管理。
 
-请检查 `Caddyfile.example`，自行配置可信 HTTPS 反向代理及防火墙；向导不会
+生成的配置中，Caddy 负责签发证书并提供主页面、后台和 HTTP/1.1 接口；节点列表中的
+地址（包括主端自身）指向内置 TLS 测速入口，例如 `https://main.example.com:8444`，
+防火墙需放行该 TCP 端口。请检查 `Caddyfile.example`，自行配置可信 HTTPS 反向代理及防火墙；向导不会
 安装或修改 Caddy、申请证书、开放端口或远程部署。IP HTTPS 需要浏览器信任的
 IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各后端，主端和
 后端之间不建立常驻控制连接。
 
 向导还生成可选的 `service.example` 和 `install-service.sh`。运行
 `sudo ./install-service.sh` 前应先检查内容，创建所选非 root 用户，并保证该用户
-可穿越、读取输出目录且可执行脚本和二进制文件。安装器不会覆盖已有同名服务。
+可穿越、读取输出目录且可执行脚本和二进制文件。安装器先复制一次证书，再安装主服务及
+每 10 分钟复制证书的 `jittercrest-<id>-tls-sync.timer`；不会覆盖已有同名服务。
 非交互 JSON 参数可查阅 `python3 cpp/deploy/quickstart.py --help`。
 
 ## 工作方式
@@ -218,7 +225,7 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
     SPEEDTEST_TLS_CERT=/etc/jittercrest/tls/node.crt
     SPEEDTEST_TLS_KEY=/etc/jittercrest/tls/node.key
 
-该入口通告 32 MiB 单流窗口和 64 MiB 连接窗口，把每个请求转交本机 PORT，并用 TLS 对端地址覆盖客户端提交的代理头，因此要求 TRUST_PROXY_HEADERS=1 且 SPEEDTEST_HOST 位于 TRUSTED_PROXY_IPS。证书文件变化后约 30 秒内自动重新加载，可由现有 Caddy 等 ACME 客户端继续签发并定期复制到上述路径。节点的 base 应改为该入口地址，例如 https://203.0.113.10:8444。详见 [TLS HTTP/2 入口说明](cpp/docs/tls-edge.md)。
+该入口通告 32 MiB 单流窗口和 64 MiB 连接窗口，把每个请求转交本机 PORT，并用 TLS 对端地址覆盖客户端提交的代理头，因此要求 TRUST_PROXY_HEADERS=1 且 SPEEDTEST_HOST 位于 TRUSTED_PROXY_IPS。证书文件变化后约 30 秒内自动重新加载，可由现有 Caddy 等 ACME 客户端继续签发并定期复制到上述路径。节点的 base 应改为该入口地址，例如 https://203.0.113.10:8444。快速搭建向导和一键接入默认按此方式配置。详见 [TLS HTTP/2 入口说明](cpp/docs/tls-edge.md)。
 
 ## 部署与安全
 

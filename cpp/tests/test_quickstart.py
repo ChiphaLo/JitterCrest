@@ -1,7 +1,9 @@
 """Offline wizard regression tests; never installs services or starts proxies."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -26,6 +28,12 @@ class QuickstartTests(unittest.TestCase):
         main = quick.prepare(spec(), [data["node"], probe["node"]])
         nodes = json.loads(main["env"]["SPEEDTEST_NODES"])
         self.assertEqual([x["id"] for x in nodes], ["local", "node-a", "probe-a"])
+        self.assertEqual([x["base"] for x in nodes], ["https://main.example.com:8444",
+                                                      "https://node.example.com:8444",
+                                                      "https://probe.example.com:8444"])
+        self.assertEqual((main["env"]["SPEEDTEST_TLS_PORT"], data["env"]["SPEEDTEST_TLS_PORT"]), ("8444", "8444"))
+        self.assertEqual(quick.prepare({**spec("data"), "tls_port": 9443}, [])["node"]["base"],
+                         "https://node.example.com:9443")
         self.assertEqual(main["env"]["SPEEDTEST_PROBE_ONLY_NODE_ID"], "probe-a")
         self.assertEqual(data["env"]["ALLOWED_ORIGINS"], "https://main.example.com")
         self.assertEqual(probe["env"]["SPEEDTEST_PROBE_ONLY"], "1")
@@ -42,6 +50,8 @@ class QuickstartTests(unittest.TestCase):
     def test_input_and_mapping_validation(self):
         for update in [{"id": "../x"}, {"id": "local"}, {"label": "x\ny"},
                        {"port": True}, {"port": 22}, {"udp4": "127.0.0.1"},
+                       {"tls_port": 32132}, {"tls_port": 443}, {"tls_port": 80}, {"tls_port": True},
+                       {"tls_port": 70000},
                        {"native_prefix": "relative"}, {"service_user": "root"}, {"extra": "x"}]:
             with self.subTest(update=update), self.assertRaises(ValueError):
                 quick.prepare({**spec(), **update}, [])
@@ -53,6 +63,7 @@ class QuickstartTests(unittest.TestCase):
     def test_import_guards(self):
         node = quick.prepare(spec("data"), [])["node"]
         for rows in [[node, node], [{**node, "base": "https://main.example.com"}],
+                     [{**node, "base": "https://main.example.com:8444"}],
                      [{**node, "role": "main"}], [{**node, "secret": "x"}]]:
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 quick.prepare(spec(), rows)
@@ -66,7 +77,7 @@ class QuickstartTests(unittest.TestCase):
             out = Path(directory) / "new setup"
             original = "中文'quote;$(false)"
             quick.generate({**spec(), "label": original}, [], out)
-            for name in ["build.sh", "run.sh", "install-service.sh"]:
+            for name in ["build.sh", "run.sh", "install-service.sh", "sync-cert.sh"]:
                 subprocess.run(["bash", "-n", str(out / name)], check=True)
             result = subprocess.check_output(["bash", "-c", 'set -a; source "$1"; printf "%s" "$SPEEDTEST_NODES"', "shell", str(out / "runtime.env")], text=True)
             self.assertEqual(json.loads(result)[0]["label"], original)
@@ -75,6 +86,11 @@ class QuickstartTests(unittest.TestCase):
             self.assertIn("User=jittercrest", (out / "service.example").read_text())
             self.assertIn('set -o noclobber', (out / "install-service.sh").read_text())
             self.assertNotIn("systemctl", (out / "run.sh").read_text())
+            runtime = (out / "runtime.env").read_text()
+            self.assertIn("SPEEDTEST_TLS_CERT=" + shlex.quote(str(out / "tls/node.crt")), runtime)
+            self.assertIn("jittercrest-main-tls-sync", (out / "install-service.sh").read_text())
+            self.assertIn("OnUnitActiveSec=10min", (out / "tls-sync.timer.example").read_text())
+            self.assertIn("sync-cert.sh", (out / "tls-sync.service.example").read_text())
             with self.assertRaises(FileExistsError):
                 quick.generate(spec(), [], out)
             self.assertEqual(json.loads(result)[0]["label"], original)
@@ -86,6 +102,25 @@ class QuickstartTests(unittest.TestCase):
             self.assertEqual(json.loads((out / "node.json").read_text())["role"], "probe")
             self.assertIn("SPEEDTEST_WEB_UI=OFF", (out / "build.sh").read_text())
             self.assertIn("reverse_proxy 127.0.0.1:32132", (out / "Caddyfile.example").read_text())
+            self.assertIn("https://node.example.com:8444", (out / "Caddyfile.example").read_text())
+
+    @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() == 0, "certificate ownership needs root")
+    def test_certificate_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            out = d / "agent"
+            quick.generate({**spec("data"), "service_user": "nobody"}, [], out)
+            env = dict(os.environ, CADDY_DATA=str(d / "caddy"))
+            self.assertNotEqual(subprocess.run(["bash", str(out / "sync-cert.sh")], env=env,
+                                               capture_output=True).returncode, 0)
+            source = d / "caddy/certificates/acme/node.example.com"
+            source.mkdir(parents=True)
+            (source / "node.example.com.crt").write_text("cert")
+            (source / "node.example.com.key").write_text("key")
+            subprocess.run(["bash", str(out / "sync-cert.sh")], env=env, check=True)
+            key = out / "tls/node.key"
+            self.assertEqual(key.read_text(), "key")
+            self.assertEqual(key.stat().st_mode & 0o777, 0o400)
 
     def test_invalid_does_not_create_output(self):
         with tempfile.TemporaryDirectory() as directory:

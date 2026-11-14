@@ -8,8 +8,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -18,6 +20,9 @@ from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 CADDY_IMAGE = "caddy:2.11.9"
+AGENT_UID = 65532
+SYSTEMD = "/etc/systemd/system"
+CERTIFICATE_WAIT = 180
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -83,17 +88,75 @@ def available_port():
 
 
 def caddyfile(base, port):
+    """Caddy obtains the certificate on 80/443 and serves HTTP/1.1 tooling."""
     u = urlsplit(base)
     try:
         ipaddress.ip_address(u.hostname)
         issuer = "    tls {\n        issuer acme {\n            profile shortlived\n        }\n    }\n"
     except ValueError:
         issuer = ""
-    return ("{\n    admin off\n}\n" + base + " {\n" + issuer +
+    return ("{\n    admin off\n}\n" + caddy_origin(base) + " {\n" + issuer +
             f"    reverse_proxy 127.0.0.1:{port} {{\n" +
             "        header_up X-Real-IP {http.request.remote.host}\n" +
             "        header_up X-Forwarded-For {http.request.remote.host}\n" +
             "        flush_interval -1\n    }\n}\n")
+
+
+def caddy_origin(base):
+    host = urlsplit(base).hostname
+    return "https://" + (f"[{host}]" if ":" in host else host)
+
+
+def edge_port(base):
+    """Browsers stream uploads over HTTP/2 only; Caddy's fixed 1 MiB HTTP/2
+    window caps them near 1 MiB per RTT, so speed traffic uses the agent's
+    built-in TLS listener on the base port."""
+    port = urlsplit(base).port
+    if not port or port in (80, 443):
+        raise ValueError("the agent HTTPS origin needs the built-in TLS port, for example https://node.example.com:8444")
+    return port
+
+
+def certificate_source(folder, host):
+    found = sorted((folder / "caddy-data/caddy/certificates").glob(f"*/{host}/{host}.crt"),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    return found[0].parent if found and (found[0].parent / f"{host}.key").is_file() else None
+
+
+def sync_script(folder, host):
+    q = shlex.quote
+    return f"""#!/bin/sh
+# Copies the Caddy-issued certificate to the agent's built-in TLS listener.
+set -eu
+dir={q(str(folder))}
+host={q(host)}
+src=$(ls -1td "$dir"/caddy-data/caddy/certificates/*/"$host" 2>/dev/null | head -n 1)
+test -n "$src" && test -s "$src/$host.crt" && test -s "$src/$host.key"
+install -d -m 0700 -o {AGENT_UID} -g {AGENT_UID} "$dir/tls"
+for ext in crt key; do
+  cmp -s "$src/$host.$ext" "$dir/tls/node.$ext" && continue
+  install -m 0400 -o {AGENT_UID} -g {AGENT_UID} "$src/$host.$ext" "$dir/tls/.node.$ext"
+  mv -f "$dir/tls/.node.$ext" "$dir/tls/node.$ext"
+done
+"""
+
+
+def sync_units(node, script):
+    service = (f"[Unit]\nDescription=Copy the JitterCrest {node} TLS certificate\n\n"
+               f"[Service]\nType=oneshot\nExecStart=/bin/sh {script}\n")
+    timer = (f"[Unit]\nDescription=Refresh the JitterCrest {node} TLS certificate\n\n"
+             "[Timer]\nOnActiveSec=10min\nOnUnitActiveSec=10min\n\n[Install]\nWantedBy=timers.target\n")
+    return service, timer
+
+
+def edge_ready(base):
+    """True when the built-in listener presents a trusted certificate and HTTP/2."""
+    u = urlsplit(base)
+    context = ssl.create_default_context()
+    context.set_alpn_protocols(["h2"])
+    with socket.create_connection((u.hostname, u.port), timeout=5) as raw:
+        with context.wrap_socket(raw, server_hostname=u.hostname) as tls:
+            return tls.selected_alpn_protocol() == "h2"
 
 
 def install(main, node, key):
@@ -120,6 +183,7 @@ def install(main, node, key):
         if spec.get("id") != node or spec.get("main") != main:
             raise ValueError("controller returned a different enrollment")
         origin(spec["base"])
+        edge_port(spec["base"])
         if spec.get("role") not in ("data", "probe"):
             raise ValueError("invalid agent role")
         addr = ipaddress.IPv4Address(spec["udp4"])
@@ -127,8 +191,11 @@ def install(main, node, key):
             raise ValueError("invalid public UDP mapping")
         spec.update(keyHash=key_hash, port=available_port())
         save(registration, spec)
+    tls_port = edge_port(spec["base"])
+    host = urlsplit(spec["base"]).hostname
     label = "org.jittercrest.node=" + node
     containers = ["jittercrest-" + node, "jittercrest-" + node + "-tls"]
+    unit = "jittercrest-" + node + "-tls-sync"
     created = []
     try:
         print("[2/5] Preparing Docker and the C++ source", flush=True)
@@ -146,8 +213,7 @@ def install(main, node, key):
                 if info.get("Config", {}).get("Labels", {}).get("org.jittercrest.node") != node:
                     raise ValueError("container name is already used by another installation")
                 run("docker", "rm", "-f", name)
-        u = urlsplit(spec["base"])
-        for port in {80, 443, u.port or 443}:
+        for port in (80, 443, tls_port):
             with socket.socket() as s:
                 s.bind(("0.0.0.0", port))
         archive = folder / "source.tar.gz"
@@ -168,40 +234,58 @@ def install(main, node, key):
                    TRUST_PROXY_HEADERS="1", TRUSTED_PROXY_IPS="127.0.0.1,::1",
                    ALLOWED_ORIGINS=main, SPEEDTEST_ALLOW_CROSS_SITE="1",
                    SPEEDTEST_CONTROLLER_ORIGIN=main, SPEEDTEST_AGENT_ID=node,
-                   SPEEDTEST_AGENT_KEY=spec["agentKey"])
+                   SPEEDTEST_AGENT_KEY=spec["agentKey"], SPEEDTEST_TLS_PORT=str(tls_port),
+                   SPEEDTEST_TLS_HOST="0.0.0.0", SPEEDTEST_TLS_CERT="/tls/node.crt",
+                   SPEEDTEST_TLS_KEY="/tls/node.key")
         envfile = folder / "agent.env"
         envfile.write_text("".join(f"{k}={v}\n" for k, v in env.items()))
         os.chmod(envfile, 0o600)
         proxyfile = folder / "Caddyfile"
         proxyfile.write_text(caddyfile(spec["base"], spec["port"]))
-        print("[4/5] Starting agent and trusted HTTPS", flush=True)
-        run("docker", "run", "-d", "--name", containers[0], "--label", label,
-            "--restart", "unless-stopped", "--network", "host", "--read-only",
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
-            "--memory", "512m", "--tmpfs", "/tmp", "--env-file", str(envfile), image)
-        created.append(containers[0])
+        print("[4/5] Obtaining the certificate and starting the agent", flush=True)
         (folder / "caddy-data").mkdir(exist_ok=True)
         run("docker", "run", "-d", "--name", containers[1], "--label", label,
             "--restart", "unless-stopped", "--network", "host",
             "-v", str(proxyfile) + ":/etc/caddy/Caddyfile:ro",
             "-v", str(folder / "caddy-data") + ":/data", CADDY_IMAGE)
         created.append(containers[1])
+        deadline = time.monotonic() + CERTIFICATE_WAIT
+        while not certificate_source(folder, host):
+            if time.monotonic() >= deadline:
+                raise ValueError("no certificate was issued: check DNS, public TCP 80/443 and provider policy")
+            time.sleep(2)
+        script = folder / "tls-sync.sh"
+        script.write_text(sync_script(folder, host))
+        os.chmod(script, 0o700)
+        service, timer = sync_units(node, script)
+        units = Path(SYSTEMD)
+        (units / (unit + ".service")).write_text(service)
+        (units / (unit + ".timer")).write_text(timer)
+        run("systemctl", "daemon-reload")
+        run("systemctl", "start", unit + ".service")
+        run("systemctl", "enable", "--now", unit + ".timer")
+        run("docker", "run", "-d", "--name", containers[0], "--label", label,
+            "--restart", "unless-stopped", "--network", "host", "--read-only",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
+            "--memory", "512m", "--tmpfs", "/tmp", "--env-file", str(envfile),
+            "-v", str(folder / "tls") + ":/tls:ro", image)
+        created.append(containers[0])
         deadline = time.monotonic() + 180
         while True:
             try:
-                with urlopen(spec["base"] + "/health", timeout=5) as response:
+                with urlopen(caddy_origin(spec["base"]) + "/health", timeout=5) as response:
                     health = json.loads(response.read(4096))
-                    if response.status == 200 and health.get("name") == node:
+                    if response.status == 200 and health.get("name") == node and edge_ready(spec["base"]):
                         break
-            except (OSError, ValueError, http.client.HTTPException):
+            except (OSError, ValueError, http.client.HTTPException, ssl.SSLError):
                 pass
             if time.monotonic() >= deadline:
-                raise ValueError("HTTPS did not become ready: check DNS, public TCP 80/443, certificate issuance and provider policy")
+                raise ValueError(f"HTTPS did not become ready: check public TCP 80/443/{tls_port} and provider policy")
             time.sleep(2)
         print("[5/5] Activating node on the main server", flush=True)
         api(main, "/api/enrollment/activate", spec["agentKey"], node)
         print(f"Connected: {node} at {spec['base']}. Reload the node picker on the main page.", flush=True)
-        print(f"Installation: {folder}. Keep public UDP reachable for WebRTC.", flush=True)
+        print(f"Installation: {folder}. Keep public TCP {tls_port} and UDP reachable for WebRTC.", flush=True)
     except BaseException:
         for name in reversed(created):
             subprocess.run(["docker", "rm", "-f", name], check=False, stdout=subprocess.DEVNULL)

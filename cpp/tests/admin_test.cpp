@@ -81,6 +81,17 @@ int main() {
         check(call("POST", "/api/admin/node", {{"id", "local"}, {"action", "delete"}},
                    cfg.admin_token)
                   .status == 400);
+        {
+            auto edge_cfg = cfg;
+            edge_cfg.admin_state = (folder / "edge").string();
+            edge_cfg.nodes = Json::array({Json{
+                {"id", "local"}, {"label", "Main"}, {"base", "https://main.example.com:8444"}}});
+            speedtest::NodeAdmin edge_admin(edge_cfg);
+            check(edge_admin
+                      .handle("POST", "/api/admin/node", cfg.admin_token, cfg.public_origin,
+                              {{"id", "local"}, {"action", "delete"}})
+                      .status == 400);
+        }
         std::ifstream input(folder / "nodes.json");
         const std::string disk((std::istreambuf_iterator<char>(input)), {});
         check(disk.find(join) == std::string::npos && disk.find(agent) == std::string::npos);

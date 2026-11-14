@@ -52,6 +52,10 @@ std::string text(const Json &body, const char *key) {
 bool valid_id(const std::string &id) {
     return std::regex_match(id, std::regex("[a-z0-9][a-z0-9_-]{0,63}"));
 }
+// The main server's own entry: same-origin, or reached through its TLS listener.
+bool local_node(const Json &node) {
+    return node.value("id", "") == "local" || node.value("base", "").empty();
+}
 void validate_label(const std::string &label) {
     if (label.empty() || label.size() > 160 ||
         std::any_of(label.begin(), label.end(), [](unsigned char c) { return c < 32 || c == 127; }))
@@ -235,7 +239,7 @@ AdminReply NodeAdmin::handle(std::string_view method, std::string_view path,
             if (it == nodes.end())
                 return {404, {{"error", "node not found"}}};
             if (action == "delete") {
-                if (it->value("base", "").empty())
+                if (local_node(*it))
                     throw std::invalid_argument("the local node must remain available");
                 nodes.erase(it);
                 commit(std::move(next));
@@ -260,7 +264,7 @@ AdminReply NodeAdmin::handle(std::string_view method, std::string_view path,
             validate_label(label);
             if (!body.contains("enabled") || !body["enabled"].is_boolean())
                 throw std::invalid_argument("enabled must be boolean");
-            if (it->value("base", "").empty() && body["enabled"] == false)
+            if (local_node(*it) && body["enabled"] == false)
                 throw std::invalid_argument("the local node must remain enabled");
             (*it)["label"] = label;
             (*it)["enabled"] = body["enabled"];

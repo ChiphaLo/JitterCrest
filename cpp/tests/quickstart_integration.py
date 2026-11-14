@@ -61,20 +61,20 @@ def main():
                         "subjectAltName=DNS:localhost,IP:127.0.0.1", "-keyout", str(key), "-out", str(cert)],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ports = []
-        while len(ports) < 6:
+        while len(ports) < 9:
             candidate = port()
             if candidate not in ports:
                 ports.append(candidate)
-        main_port, data_port, probe_port, main_tls, data_tls, probe_tls = ports
+        main_port, data_port, probe_port, main_tls, data_tls, probe_tls, main_edge, data_edge, probe_edge = ports
         main_origin = f"https://localhost:{main_tls}"
         data_origin, probe_origin = f"https://127.0.0.1:{data_tls}", f"https://127.0.0.1:{probe_tls}"
         common = dict(native_prefix="/opt/deps", service_user="jittercrest")
         data_spec = dict(common, role="data", id="node-a", label="Data", public_origin=data_origin,
-                         main_origin=main_origin, udp4="", port=data_port)
+                         main_origin=main_origin, udp4="", port=data_port, tls_port=data_edge)
         probe_spec = dict(common, role="probe", id="probe-a", label="Probe", public_origin=probe_origin,
-                          main_origin=main_origin, udp4="8.8.8.8", port=probe_port)
+                          main_origin=main_origin, udp4="8.8.8.8", port=probe_port, tls_port=probe_edge)
         main_spec = dict(common, role="main", id="main", label="Main", public_origin=main_origin,
-                         main_origin=main_origin, udp4="", port=main_port)
+                         main_origin=main_origin, udp4="", port=main_port, tls_port=main_edge)
         data, probe, main_dir = root / "data", root / "probe", root / "main"
         quick.generate(data_spec, [], data)
         quick.generate(probe_spec, [], probe)
@@ -84,6 +84,10 @@ def main():
         for folder, binary in [(main_dir, a.ui), (data, a.agent), (probe, a.agent)]:
             (folder / "build/cpp").mkdir(parents=True)
             (folder / "build/cpp/speedtest-cpp").symlink_to(binary.resolve(strict=True))
+            # What sync-cert.sh copies from Caddy's storage on a real host.
+            (folder / "tls").mkdir(mode=0o700)
+            (folder / "tls/node.crt").write_bytes(cert.read_bytes())
+            (folder / "tls/node.key").write_bytes(key.read_bytes())
             log = stack.enter_context(tempfile.TemporaryFile())
             env = {k: v for k, v in os.environ.items() if not k.startswith(("SPEEDTEST_", "TRUST", "ALLOWED_"))}
             process = subprocess.Popen(["bash", str(folder / "run.sh")], env=env, stdout=log, stderr=log)
@@ -119,7 +123,20 @@ def main():
         assert node_json
         nodes = json.loads(node_json.group(1))
         assert [n["id"] for n in nodes] == ["local", "node-a", "probe-a"]
-        assert nodes[1]["base"] == data_origin and nodes[2]["base"] == probe_origin
+        edges = [f"https://localhost:{main_edge}", f"https://127.0.0.1:{data_edge}", f"https://127.0.0.1:{probe_edge}"]
+        assert [n["base"] for n in nodes] == edges, nodes
+        csp = request("localhost", main_tls, context, "GET", "/")[1]["content-security-policy"]
+        assert all(e in csp for e in edges), csp
+        # Speed traffic: HTTP/2 through each built-in listener with its large windows.
+        for edge in edges:
+            out = subprocess.run(["curl", "-sS", "--http2", "--cacert", str(cert), "-o", "/dev/null",
+                                  "-w", "%{http_version} %{http_code}", edge + "/health"],
+                                 capture_output=True, text=True, check=True).stdout
+            assert out == "2 200", (edge, out)
+        upload = subprocess.run(["curl", "-sS", "--http2", "--cacert", str(cert), "-H", "Origin: " + main_origin,
+                                 "-X", "POST", "-T", "-", edges[1] + "/upload-stream?warmupMs=0"],
+                                input=bytes(8 << 20), capture_output=True, check=True).stdout
+        assert json.loads(upload)["bytes"] == 8 << 20
         assert request("127.0.0.1", data_tls, context, "GET", "/")[0] == 404
         headers = {"Origin": main_origin}
         # Reuse one upstream connection after a rejected request with a body.
@@ -148,7 +165,7 @@ def main():
         status, _, _ = request("127.0.0.1", data_tls, context, "POST", "/webrtc/offer", b"{}",
                                {"Origin": main_origin, "Content-Type": "application/json"})
         assert status == 400, status  # RTC is enabled, not a default-off 503.
-        print("PASS real C++ UI/data/probe generated setup through verified local TLS/Caddy; add-node, CORS and role isolation")
+        print("PASS real C++ UI/data/probe generated setup through verified local TLS/Caddy and built-in HTTP/2 listeners; add-node, CORS and role isolation")
 
 
 if __name__ == "__main__":

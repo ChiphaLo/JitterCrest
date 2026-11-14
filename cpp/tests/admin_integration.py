@@ -192,19 +192,36 @@ def main():
             expect(admin.locator("#login")).to_be_visible()
             assert not errors, errors
         if a.docker_socket:
-            origin_docker = f"https://127.0.0.1:{port()}"
+            origin_docker, caddy_docker = f"https://127.0.0.1:{port()}", f"https://127.0.0.1:{port()}"
             created = request("/api/admin/enrollments", dict(id="docker-vps", label="Docker VPS",
                               base=origin_docker, udp4="8.8.8.8", role="data"), token)
             assert created[0] == 201
             install_spec = importlib.util.spec_from_file_location("enroll_agent", Path(__file__).resolve().parents[1] / "deploy/enroll_agent.py")
             installer = importlib.util.module_from_spec(install_spec)
             install_spec.loader.exec_module(installer)
-            real_path, real_run = Path, installer.run
+            real_path, real_run, real_source = Path, installer.run, installer.certificate_source
+            real_context = ssl.create_default_context
+            installed = root / "installed"
+            (root / "systemd").mkdir()
             def private_path(value):
-                return root / "installed" if str(value) == "/opt/jittercrest-agents" else real_path(value)
+                if str(value) == installer.SYSTEMD:
+                    return root / "systemd"
+                return installed if str(value) == "/opt/jittercrest-agents" else real_path(value)
             tls_opener = build_opener(HTTPSHandler(context=ctx))
+            def issued(folder, host):
+                # Stands in for ACME issuance into Caddy's storage on a public VPS.
+                source = folder / "caddy-data/caddy/certificates/local" / host
+                source.mkdir(parents=True, exist_ok=True)
+                (source / f"{host}.crt").write_bytes(cert.read_bytes())
+                (source / f"{host}.key").write_bytes(key.read_bytes())
+                return real_source(folder, host)
             def docker_run(*args):
                 args = list(args)
+                if args[0] == "systemctl":
+                    # Run the generated certificate copy directly instead of host units.
+                    if args[1] == "start":
+                        subprocess.run(["sh", str(installed / "docker-vps/tls-sync.sh")], check=True)
+                    return
                 if args[:2] == ["docker", "build"]:
                     args[2:2] = ["--network", "host"]
                     build_log = root / "docker-build.log"
@@ -221,7 +238,7 @@ def main():
                     args[-1:-1] = mounts
                 real_run(*args)
             def test_caddy(base, backend_port):
-                return ("{\n admin off\n auto_https off\n}\n" + base +
+                return ("{\n admin off\n auto_https off\n}\n" + caddy_docker +
                         f" {{\n tls /test.pem /test.key\n reverse_proxy 127.0.0.1:{backend_port}\n}}\n")
             docker_env = dict(os.environ, DOCKER_HOST="unix://" + str(a.docker_socket))
             def cleanup_containers():
@@ -232,8 +249,16 @@ def main():
                     patch.object(installer, "urlopen", side_effect=tls_opener.open), \
                     patch.object(installer, "run", side_effect=docker_run), \
                     patch.object(installer, "caddyfile", side_effect=test_caddy), \
+                    patch.object(installer, "caddy_origin", return_value=caddy_docker), \
+                    patch.object(installer, "certificate_source", side_effect=issued), \
+                    patch.object(installer.ssl, "create_default_context",
+                                 side_effect=lambda *_, **__: real_context(cafile=str(cert))), \
                     patch.dict(os.environ, docker_env, clear=True):
                 installer.install(main_origin, "docker-vps", json.loads(created[2])["key"])
+            out = subprocess.run(["curl", "-sS", "--http2", "--cacert", str(cert), "-o", "/dev/null",
+                                  "-w", "%{http_version} %{http_code}", origin_docker + "/health"],
+                                 capture_output=True, text=True, check=True).stdout
+            assert out == "2 200", out
             listed = json.loads(request("/api/admin/nodes", bearer=token)[2])["nodes"]
             assert next(n for n in listed if n["id"] == "docker-vps")["status"] == "online"
         # Durable registry remains authoritative after restarting the main service.

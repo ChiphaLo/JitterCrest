@@ -56,7 +56,9 @@ apt package on Debian/Ubuntu. Review the command and downloaded installer before
 running them on a VPS; the controller is trusted to distribute executable source.
 The Docker build context excludes environment files, archives, VCS and operator
 records. The C++ runtime runs non-root with a read-only filesystem and no added
-capabilities; Caddy manages certificates in its separate data directory.
+capabilities; Caddy manages certificates in its separate data directory. A root
+systemd timer copies the issued certificate and key, mode 0400, into a directory
+owned by the container user and mounted read-only for the built-in TLS listener.
 
 For vulnerabilities use GitHub private vulnerability reporting where available,
 or contact the owner without publicly posting secrets/exploitable operational

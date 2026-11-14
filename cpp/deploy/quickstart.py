@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 NODE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+DEFAULT_TLS_PORT = 8444
 
 
 def origin(value):
@@ -44,6 +45,12 @@ def origin(value):
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("invalid origin port")
     return "https://" + host + (f":{port}" if port and port != 443 else "")
+
+
+def with_port(value, port):
+    """The same host on another HTTPS port (the built-in TLS listener)."""
+    host = urlsplit(value).hostname
+    return origin("https://" + (f"[{host}]" if ":" in host else host) + f":{port}")
 
 
 def node_id(value):
@@ -116,7 +123,7 @@ def add_node(directory, value):
         nodes = json.loads(env["SPEEDTEST_NODES"])
         if (not isinstance(nodes, list) or not nodes or
                 any(not isinstance(n, dict) or set(n) != {"id", "label", "base"} for n in nodes) or
-                nodes[0]["id"] != "local" or nodes[0]["base"] != ""):
+                nodes[0]["id"] != "local"):
             raise ValueError("unsupported node list; refusing to overwrite custom configuration")
         if any(n["id"] == node["id"] or n["base"] == node["base"] for n in nodes):
             raise ValueError("node ID or origin already exists")
@@ -160,7 +167,8 @@ def add_node(directory, value):
 def prepare(spec, imported):
     if not isinstance(spec, dict):
         raise ValueError("configuration must be a JSON object")
-    allowed = {"role", "id", "label", "public_origin", "main_origin", "udp4", "port", "native_prefix", "service_user"}
+    allowed = {"role", "id", "label", "public_origin", "main_origin", "udp4", "port", "tls_port",
+               "native_prefix", "service_user"}
     if set(spec) - allowed:
         raise ValueError("unexpected configuration keys: " + ", ".join(sorted(set(spec) - allowed)))
     role = spec.get("role")
@@ -179,6 +187,15 @@ def prepare(spec, imported):
     port = spec.get("port", 32132)
     if isinstance(port, bool) or not isinstance(port, int) or not 1024 <= port <= 65535:
         raise ValueError("backend port must be an integer from 1024 to 65535")
+    # Browsers stream uploads only over HTTP/2. Reverse proxies with a fixed
+    # 1 MiB HTTP/2 window (Caddy) cap them near 1 MiB per RTT, so speed traffic
+    # uses the built-in TLS listener; the proxy serves the page and certificates.
+    tls_port = spec.get("tls_port", DEFAULT_TLS_PORT)
+    if isinstance(tls_port, bool) or not isinstance(tls_port, int) or not 1 <= tls_port <= 65535:
+        raise ValueError("tls_port must be an integer from 1 to 65535")
+    if tls_port in (port, urlsplit(public).port or 443, 80):
+        raise ValueError("tls_port must differ from the backend, HTTP and public HTTPS ports")
+    edge = with_port(public, tls_port)
     ip = udp4(spec.get("udp4", ""), role)
     prefix_value = spec.get("native_prefix", "/opt/jittercrest-deps")
     if not isinstance(prefix_value, str) or not Path(prefix_value).is_absolute() or any(c in prefix_value for c in "\n\r\x00"):
@@ -193,27 +210,28 @@ def prepare(spec, imported):
     ids = [n["id"] for n in nodes]
     if len(ids) != len(set(ids)) or name in ids:
         raise ValueError("duplicate node ID")
-    if any(n["base"] == public for n in nodes) or len({n["base"] for n in nodes}) != len(nodes):
+    if any(n["base"] in (public, edge) for n in nodes) or len({n["base"] for n in nodes}) != len(nodes):
         raise ValueError("duplicate public origin")
     if sum(n["role"] == "probe" for n in nodes) > 1:
         raise ValueError("the wizard supports at most one probe-only node")
     env = dict(SPEEDTEST_HOST="127.0.0.1", PORT=str(port), SPEEDTEST_NODE_NAME=name,
                TRUST_PROXY_HEADERS="1", TRUSTED_PROXY_IPS="127.0.0.1,::1",
                ALLOWED_ORIGINS=main, SPEEDTEST_ALLOW_CROSS_SITE="1",
-               SPEEDTEST_RUST_RTC_EXPERIMENTAL="1")
+               SPEEDTEST_RUST_RTC_EXPERIMENTAL="1", SPEEDTEST_TLS_PORT=str(tls_port),
+               SPEEDTEST_TLS_HOST="0.0.0.0")
     if ip:
         env["SPEEDTEST_WEBRTC_UDP4"] = ip
     if role == "probe":
         env["SPEEDTEST_PROBE_ONLY"] = "1"
     if role == "main":
-        config_nodes = [dict(id="local", label=title, base="")]
+        config_nodes = [dict(id="local", label=title, base=edge)]
         config_nodes += [dict(id=n["id"], label=n["label"], base=n["base"]) for n in nodes]
         env["SPEEDTEST_NODES"] = json.dumps(config_nodes, ensure_ascii=False, separators=(",", ":"))
         probe = next((n for n in nodes if n["role"] == "probe"), None)
         if probe:
             env["SPEEDTEST_PROBE_ONLY_NODE_ID"] = probe["id"]
-    output_node = None if role == "main" else descriptor(dict(schema=1, role=role, id=name, label=title, base=public))
-    return dict(role=role, public=public, main=main, port=port, udp4=ip,
+    output_node = None if role == "main" else descriptor(dict(schema=1, role=role, id=name, label=title, base=edge))
+    return dict(role=role, public=public, edge=edge, tls_port=tls_port, main=main, port=port, udp4=ip,
                 prefix=prefix_value, service_user=service_user, env=env, node=output_node, nodes=nodes)
 
 
@@ -232,6 +250,7 @@ def generate(spec, imported, output):
         setup["env"].update(SPEEDTEST_ADMIN_TOKEN=secrets.token_urlsafe(32),
                             SPEEDTEST_ADMIN_STATE=str(out / "state"),
                             SPEEDTEST_PUBLIC_ORIGIN=setup["public"])
+    setup["env"].update(SPEEDTEST_TLS_CERT=str(out / "tls/node.crt"), SPEEDTEST_TLS_KEY=str(out / "tls/node.key"))
     env = env_text(setup["env"])
     web = "ON" if setup["role"] == "main" else "OFF"
     build = f'''#!/usr/bin/env bash
@@ -258,6 +277,7 @@ echo "Build and tests complete. Run ./run.sh; configure HTTPS using Caddyfile.ex
     runner = f'''#!/usr/bin/env bash
 set -euo pipefail
 cd {q(str(out))}
+[[ -s tls/node.crt && -s tls/node.key ]] || {{ echo "Run sudo ./sync-cert.sh once Caddy has issued the certificate." >&2; exit 1; }}
 set -a
 source ./runtime.env
 set +a
@@ -266,6 +286,43 @@ exec ./build/cpp/speedtest-cpp
     def unit_quote(value):
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
     unit_name = "jittercrest-" + setup["env"]["SPEEDTEST_NODE_NAME"] + ".service"
+    sync_name = "jittercrest-" + setup["env"]["SPEEDTEST_NODE_NAME"] + "-tls-sync"
+    host = urlsplit(setup["public"]).hostname
+    sync = f'''#!/usr/bin/env bash
+# Copies the certificate Caddy issued for this host to the built-in TLS listener.
+set -euo pipefail
+DATA="${{CADDY_DATA:-/var/lib/caddy/.local/share/caddy}}"
+HOST={q(host)}
+OUT={q(str(out))}
+USER_NAME={q(setup["service_user"])}
+[[ "$EUID" -eq 0 ]] || {{ echo "Run with sudo." >&2; exit 1; }}
+src=$(ls -1td "$DATA"/certificates/*/"$HOST" 2>/dev/null | head -n 1 || true)
+[[ -n "$src" && -s "$src/$HOST.crt" && -s "$src/$HOST.key" ]] || {{ echo "No certificate for $HOST in $DATA; serve Caddyfile.example with Caddy first." >&2; exit 1; }}
+GROUP=$(id -gn "$USER_NAME")
+install -d -m 0700 -o "$USER_NAME" -g "$GROUP" "$OUT/tls"
+for ext in crt key; do
+  cmp -s "$src/$HOST.$ext" "$OUT/tls/node.$ext" && continue
+  install -m 0400 -o "$USER_NAME" -g "$GROUP" "$src/$HOST.$ext" "$OUT/tls/.node.$ext"
+  mv -f "$OUT/tls/.node.$ext" "$OUT/tls/node.$ext"
+done
+'''
+    sync_service = f'''[Unit]
+Description=Copy the JitterCrest {setup["role"]} TLS certificate
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash {unit_quote(str(out / "sync-cert.sh"))}
+'''
+    sync_timer = '''[Unit]
+Description=Refresh the JitterCrest TLS certificate
+
+[Timer]
+OnActiveSec=10min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
+'''
     service = f'''[Unit]
 Description=JitterCrest {setup["role"]} backend
 After=network.target
@@ -304,28 +361,38 @@ set -euo pipefail
 OUT={q(str(out))}
 USER_NAME={q(setup["service_user"])}
 UNIT={q(unit_name)}
+SYNC={q(sync_name)}
 TARGET="/etc/systemd/system/$UNIT"
 [[ "$EUID" -eq 0 ]] || {{ echo "Run with sudo after checking service.example." >&2; exit 1; }}
 id "$USER_NAME" >/dev/null || {{ echo "Create the non-root service user $USER_NAME first." >&2; exit 1; }}
 runuser -u "$USER_NAME" -- test -r "$OUT/runtime.env" || {{ echo "Service user cannot read runtime.env or traverse its parents." >&2; exit 1; }}
 runuser -u "$USER_NAME" -- test -x "$OUT/build/cpp/speedtest-cpp" || {{ echo "Build the binary and grant the service user access first." >&2; exit 1; }}
-[[ ! -e "$TARGET" && ! -L "$TARGET" ]] || {{ echo "Unit already exists; refusing to overwrite $TARGET." >&2; exit 1; }}
-[[ "$(systemctl show "$UNIT" -p LoadState --value)" == not-found ]] || {{ echo "Unit already loaded; refusing to replace it." >&2; exit 1; }}
+for name in "$UNIT" "$SYNC.service" "$SYNC.timer"; do
+  [[ ! -e "/etc/systemd/system/$name" && ! -L "/etc/systemd/system/$name" ]] || {{ echo "Unit already exists; refusing to overwrite $name." >&2; exit 1; }}
+  [[ "$(systemctl show "$name" -p LoadState --value)" == not-found ]] || {{ echo "Unit $name already loaded; refusing to replace it." >&2; exit 1; }}
+done
+bash "$OUT/sync-cert.sh"
 (umask 022; set -o noclobber; cat "$OUT/service.example" > "$TARGET")
+(umask 022; set -o noclobber; cat "$OUT/tls-sync.service.example" > "/etc/systemd/system/$SYNC.service")
+(umask 022; set -o noclobber; cat "$OUT/tls-sync.timer.example" > "/etc/systemd/system/$SYNC.timer")
 rollback() {{
-  systemctl disable --now "$UNIT" >/dev/null 2>&1 || true
+  systemctl disable --now "$UNIT" "$SYNC.timer" >/dev/null 2>&1 || true
   if cmp -s "$OUT/service.example" "$TARGET"; then rm -f -- "$TARGET"; fi
+  if cmp -s "$OUT/tls-sync.service.example" "/etc/systemd/system/$SYNC.service"; then rm -f -- "/etc/systemd/system/$SYNC.service"; fi
+  if cmp -s "$OUT/tls-sync.timer.example" "/etc/systemd/system/$SYNC.timer"; then rm -f -- "/etc/systemd/system/$SYNC.timer"; fi
   systemctl daemon-reload || true
 }}
 trap rollback ERR
-chmod 0644 "$TARGET"
+chmod 0644 "$TARGET" "/etc/systemd/system/$SYNC.service" "/etc/systemd/system/$SYNC.timer"
 systemctl daemon-reload
+systemctl enable --now "$SYNC.timer"
 systemctl enable --now "$UNIT"
 systemctl is-active --quiet "$UNIT"
 trap - ERR
-echo "Started $UNIT. Review Caddyfile.example separately; this script never changes the proxy."
+echo "Started $UNIT and $SYNC.timer. Review Caddyfile.example separately; this script never changes the proxy."
 '''
-    caddy = (f"# Example site only: validate certificates and merge safely with any existing Caddy config.\n"
+    caddy = (f"# Example site only: merge safely with any existing Caddy config. Caddy issues the\n"
+             f"# certificate and serves this origin; speed tests use the built-in listener {setup['edge']}.\n"
              f"{setup['public']} {{\n"
              f"    reverse_proxy 127.0.0.1:{setup['port']} {{\n"
              "        header_up X-Real-IP {http.request.remote.host}\n"
@@ -341,7 +408,10 @@ echo "Started $UNIT. Review Caddyfile.example separately; this script never chan
     (out / "run.sh").write_text(runner, encoding="utf-8")
     (out / "service.example").write_text(service, encoding="utf-8")
     (out / "install-service.sh").write_text(installer, encoding="utf-8")
-    for f in ["build.sh", "run.sh", "install-service.sh"]:
+    (out / "sync-cert.sh").write_text(sync, encoding="utf-8")
+    (out / "tls-sync.service.example").write_text(sync_service, encoding="utf-8")
+    (out / "tls-sync.timer.example").write_text(sync_timer, encoding="utf-8")
+    for f in ["build.sh", "run.sh", "install-service.sh", "sync-cert.sh"]:
         (out / f).chmod(0o700)
     (out / "Caddyfile.example").write_text(caddy, encoding="utf-8")
     if setup["node"]:
@@ -366,6 +436,7 @@ def wizard():
     main = public if role == "main" else ask("主网页 HTTPS 地址，例如 https://main.example.com")
     ip = ask("本节点公网 UDP IPv4（留空自动选择；仅探针节点必须填写）", "")
     port = int(ask("本机后端监听端口", "32132"))
+    tls_port = int(ask("内置 TLS 测速入口端口（需在防火墙放行 TCP）", str(DEFAULT_TLS_PORT)))
     prefix = ask("原生依赖目录（绝对路径）", "/opt/jittercrest-deps")
     default_user = getpass.getuser()
     user = ask("运行 systemd 服务的现有非 root 用户", "jittercrest" if default_user == "root" else default_user)
@@ -379,7 +450,8 @@ def wizard():
             paths.append(path)
     output = ask("新建输出目录（必须不存在）")
     return dict(role=role, id=name, label=title, public_origin=public,
-                main_origin=main, udp4=ip, port=port, native_prefix=prefix, service_user=user), paths, output
+                main_origin=main, udp4=ip, port=port, tls_port=tls_port, native_prefix=prefix,
+                service_user=user), paths, output
 
 
 def main():
@@ -410,7 +482,8 @@ def main():
         result = generate(spec, imported, output)
         print(f"已生成 {result['role']} 配置：{Path(output).absolute()}")
         print("执行 ./build.sh --bootstrap 构建依赖及服务；已有依赖时执行 ./build.sh。")
-        print("执行 ./run.sh 启动前台服务；Caddyfile.example 仅为示例，不会自动安装或修改配置。")
+        print("按 Caddyfile.example 配置 Caddy 并签发证书后，执行 sudo ./sync-cert.sh 复制证书，再执行 ./run.sh 启动前台服务。")
+        print(f"测速流量走内置 TLS 入口 {result['edge']}：请在防火墙放行 TCP {result['tls_port']}。")
         print(f"可选 systemd：确保 {result['service_user']} 已存在且可读取输出目录，再检查并运行 sudo ./install-service.sh。")
         if result["node"]:
             print("将 node.json 安全复制到主节点，在主节点向导中导入；无需主端主动连接后端。")
