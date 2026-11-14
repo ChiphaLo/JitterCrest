@@ -354,24 +354,24 @@
        remain intact because the real-time measurement state machine owns them. */
     :root {
       color-scheme: light dark;
-      --background: #f3f4f5;
-      --surface: #ffffff;
+      --background: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.88);
       --surface-solid: #ffffff;
-      --surface-secondary: #f0f1f2;
-      --text-primary: #1f2328;
-      --text-secondary: #5c636b;
-      --text-tertiary: #78808a;
-      --separator: rgba(31, 35, 40, 0.12);
-      --accent: #3e5c7a;
-      --success: #4d7a60;
-      --warning: #94703d;
-      --danger: #9b4943;
-      --notice: #66587a;
-      --chart-grid: rgba(31, 35, 40, 0.10);
-      --chart-label: #5c636b;
-      --chart-baseline: #3e5c7a;
-      --chart-spike: #94703d;
-      --chart-severe: #9b4943;
+      --surface-secondary: #f0f0f2;
+      --text-primary: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --text-tertiary: #86868b;
+      --separator: rgba(0, 0, 0, 0.08);
+      --accent: #5682c1;
+      --success: #7db984;
+      --warning: #ddae7c;
+      --danger: #ce7367;
+      --notice: #69447d;
+      --chart-grid: rgba(29, 29, 31, 0.10);
+      --chart-label: #6e6e73;
+      --chart-baseline: #5682c1;
+      --chart-spike: #ddae7c;
+      --chart-severe: #ce7367;
       --shadow-card: 0 1px 2px rgba(31, 35, 40, 0.05);
       --radius-card: 6px;
       --radius-control: 4px;
@@ -393,24 +393,24 @@
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --background: #141618;
-        --surface: #1d1f22;
-        --surface-solid: #1d1f22;
-        --surface-secondary: #26292d;
-        --text-primary: #e4e6e8;
-        --text-secondary: #a2a8af;
-        --text-tertiary: #868d95;
+        --background: #000000;
+        --surface: rgba(28, 28, 30, 0.88);
+        --surface-solid: #1c1c1e;
+        --surface-secondary: #2c2c2e;
+        --text-primary: #f5f5f7;
+        --text-secondary: #a1a1a6;
+        --text-tertiary: #8e8e93;
         --separator: rgba(255, 255, 255, 0.10);
-        --accent: #5d7a98;
-        --success: #5b8a6e;
-        --warning: #b8975f;
-        --danger: #b8706a;
-        --notice: #9a8cad;
-        --chart-grid: rgba(255, 255, 255, 0.10);
-        --chart-label: #a2a8af;
-        --chart-baseline: #7f9bb8;
-        --chart-spike: #b8975f;
-        --chart-severe: #b8706a;
+        --accent: #5c89c5;
+        --success: #82c289;
+        --warning: #ecd994;
+        --danger: #cf776c;
+        --notice: #a97cc3;
+        --chart-grid: rgba(255, 255, 255, 0.13);
+        --chart-label: #a1a1a6;
+        --chart-baseline: #5c89c5;
+        --chart-spike: #ecd994;
+        --chart-severe: #cf776c;
         --shadow-card: none;
       }
     }
@@ -2137,11 +2137,11 @@
     function drawLatencyPlot(upSamples, downSamples) {
       const container = $("latencyPlot");
       const theme = {
-        up: uiColor("--accent", "#3e5c7a"),
-        down: uiColor("--success", "#4d7a60"),
-        grid: uiColor("--chart-grid", "#e1e3e5"),
-        label: uiColor("--chart-label", "#5c636b"),
-        marker: uiColor("--text-tertiary", "#78808a"),
+        up: uiColor("--accent", "#5682c1"),
+        down: uiColor("--success", "#7db984"),
+        grid: uiColor("--chart-grid", "#e5e5ea"),
+        label: uiColor("--chart-label", "#6e6e73"),
+        marker: uiColor("--text-tertiary", "#86868b"),
         halo: uiColor("--surface-solid", "#ffffff"),
       };
       const w = 1000;
@@ -5465,8 +5465,8 @@
           scaleMax: 200,
           needsFullRedraw: true,
           theme: {
-            grid: uiColor("--chart-grid", "#e1e3e5"),
-            label: uiColor("--chart-label", "#5c636b"),
+            grid: uiColor("--chart-grid", "#e5e5ea"),
+            label: uiColor("--chart-label", "#6e6e73"),
           },
         };
         canvasState.render = null;
@@ -5625,11 +5625,11 @@
       state.liveRender = null;
       const ctx = canvas.getContext("2d");
       const theme = {
-        grid: uiColor("--chart-grid", "#e1e3e5"),
-        label: uiColor("--chart-label", "#5c636b"),
-        baseline: uiColor("--chart-baseline", "#3e5c7a"),
-        spike: uiColor("--chart-spike", "#94703d"),
-        severe: uiColor("--chart-severe", "#9b4943"),
+        grid: uiColor("--chart-grid", "#e5e5ea"),
+        label: uiColor("--chart-label", "#6e6e73"),
+        baseline: uiColor("--chart-baseline", "#5682c1"),
+        spike: uiColor("--chart-spike", "#ddae7c"),
+        severe: uiColor("--chart-severe", "#ce7367"),
       };
       const metrics = syncStabilityCanvas(canvas);
       const w = metrics.width;
