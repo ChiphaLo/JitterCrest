@@ -335,7 +335,8 @@ class Session : public std::enable_shared_from_this<Session> {
     std::unique_ptr<http::request_parser<http::buffer_body>> parser_;
     std::shared_ptr<App> app_;
     std::function<void()> done_;
-    std::string peer_, ip_, target_, path_;
+    // ip_ is the client address; key_ groups it for per-client limits.
+    std::string peer_, ip_, key_, target_, path_;
     Clock::time_point request_start_{};
     std::uint64_t requests_{};
     std::uint64_t read_generation_{}, write_generation_{}, idle_generation_{};
@@ -627,6 +628,7 @@ awaitable<void> Session::run() {
         target_ = std::string(parser_->get().target());
         path_ = target_.substr(0, target_.find('?'));
         ip_ = client_ip();
+        key_ = limit_key(ip_);
         head_ = parser_->get().method() == http::verb::head;
         excess_ = requests_ >= app_->cfg.http_max_requests_per_socket;
         ++requests_;
@@ -788,7 +790,8 @@ awaitable<void> Session::route() {
             co_await send(std::move(out));
         }
     } else if ((method == http::verb::get || head_) && path_is(path_, "/"))
-        co_await send(page());
+        co_await send(app_->limits.rate(key_, false) ? page()
+                                                     : failure(429, "rate limit exceeded"));
     else if ((method == http::verb::get || method == http::verb::post) &&
              path_is(path_, "/upload-progress"))
         co_await progress();
@@ -800,7 +803,7 @@ awaitable<void> Session::route() {
              (path_is(path_, "/upload") || path_is(path_, "/upload-stream")))
         co_await upload(path_is(path_, "/upload-stream"));
     else if (method == http::verb::get && path_is(path_, "/client-info")) {
-        if (!app_->limits.rate(ip_, false))
+        if (!app_->limits.rate(key_, false))
             co_await send(failure(429, "rate limit exceeded"));
         else
             co_await send(json(private_client(ip_) ? Json{{"ip", ip_}, {"private", true}}
@@ -823,7 +826,7 @@ awaitable<void> Session::management() {
         co_await send(failure(404, "not found"));
         co_return;
     }
-    if (!app_->limits.rate(ip_, false)) {
+    if (!app_->limits.rate(key_, false)) {
         co_await send(failure(429, "management request rate limit exceeded"));
         co_return;
     }
@@ -892,11 +895,11 @@ awaitable<void> Session::management() {
     co_await send(json(result.body, result.status));
 }
 awaitable<void> Session::download(bool streaming) {
-    if (!app_->limits.rate(ip_, true)) {
+    if (!app_->limits.rate(key_, true)) {
         co_await send(failure(429, "speed test rate limit exceeded"));
         co_return;
     }
-    auto admission = app_->limits.active(ip_);
+    auto admission = app_->limits.active(key_);
     if (const auto *error = std::get_if<ActiveError>(&admission)) {
         co_await send(failure(429, active_error(*error)));
         co_return;
@@ -910,7 +913,7 @@ awaitable<void> Session::download(bool streaming) {
         size = bounded(query(target_, "size"), {.fallback = small ? 102400 : 96U << 20U,
                                                 .minimum = 1024,
                                                 .maximum = small ? 1U << 20U : cfg.max_download});
-        reservation = app_->limits.reserve_download(ip_, size);
+        reservation = app_->limits.reserve_download(key_, size);
         if (!reservation) {
             co_await send(failure(429, "download byte budget exceeded"));
             co_return;
@@ -930,15 +933,16 @@ awaitable<void> Session::download(bool streaming) {
                                                              .minimum = 1000,
                                                              .maximum = 30000})
                          : cfg.fixed_download_ms);
-    if (!streaming)
-        arm_write(deadline);
+    // A client that stops reading must not hold its active slot past the
+    // stream duration; the grace covers draining the last chunks.
+    arm_write(streaming ? deadline + std::chrono::seconds(5) : deadline);
     co_await send_head(std::move(out));
     while (streaming ? Clock::now() < deadline : size > 0) {
         const auto count =
             streaming ? chunk_size
                       : static_cast<std::size_t>(std::min<std::uint64_t>(size, chunk_size));
         if (streaming) {
-            if (!app_->limits.consume(ip_, count, Direction::download)) {
+            if (!app_->limits.consume(key_, count, Direction::download)) {
                 close();
                 co_return;
             }
@@ -959,11 +963,11 @@ awaitable<void> Session::download(bool streaming) {
     cancel_write();
 }
 awaitable<void> Session::upload(bool streaming) {
-    if (!app_->limits.rate(ip_, true)) {
+    if (!app_->limits.rate(key_, true)) {
         co_await send(failure(429, "speed test rate limit exceeded"));
         co_return;
     }
-    auto admission = app_->limits.active(ip_);
+    auto admission = app_->limits.active(key_);
     if (const auto *error = std::get_if<ActiveError>(&admission)) {
         co_await send(failure(429, active_error(*error)));
         co_return;
@@ -976,7 +980,7 @@ awaitable<void> Session::upload(bool streaming) {
         const auto n = raw ? unsigned_number(*raw) : std::nullopt;
         const auto lane = static_cast<std::uint8_t>(n && *n <= 255 ? *n : 0);
         try {
-            receipt.emplace(app_->progress.attach(ip_, *id, lane));
+            receipt.emplace(app_->progress.attach(key_, *id, lane));
         } catch (const std::invalid_argument &error) {
             rejected = failure(400, error.what());
         }
@@ -1005,7 +1009,7 @@ awaitable<void> Session::upload(bool streaming) {
             const auto n = co_await read_body(buffer);
             if (n == 0)
                 continue;
-            if (!app_->limits.consume(ip_, n, Direction::upload)) {
+            if (!app_->limits.consume(key_, n, Direction::upload)) {
                 error_response = failure(429, "upload byte budget exceeded", true);
                 break;
             }
@@ -1061,7 +1065,7 @@ awaitable<void> Session::upload(bool streaming) {
         co_await send(json(Json{{"bytes", bytes}, {"elapsedMs", elapsed(start)}}));
 }
 awaitable<void> Session::progress() {
-    if (!app_->limits.rate(ip_, true)) {
+    if (!app_->limits.rate(key_, true)) {
         co_await send(failure(429, "speed test rate limit exceeded"));
         co_return;
     }
@@ -1074,7 +1078,7 @@ awaitable<void> Session::progress() {
                 result = failure(400, "invalid progress close");
             else {
                 try {
-                    app_->progress.finish(ip_, *id);
+                    app_->progress.finish(key_, *id);
                     result = json(Json{{"closed", true}});
                 } catch (const std::invalid_argument &error) {
                     result = failure(400, error.what());
@@ -1096,7 +1100,7 @@ awaitable<void> Session::progress() {
                     static_cast<std::size_t>(cfg.max_active_global),
                     static_cast<std::size_t>(cfg.max_active_per_ip)};
                 try {
-                    const auto created = app_->progress.create(ip_, options);
+                    const auto created = app_->progress.create(key_, options);
                     result = json(Json{{"id", created},
                                        {"version", 1},
                                        {"intervalMs", 100},
@@ -1113,12 +1117,12 @@ awaitable<void> Session::progress() {
         co_await send(json(Json{{"version", 1}, {"intervalMs", 100}}));
         co_return;
     }
-    const auto record = app_->progress.get({.owner = ip_, .id = *id});
+    const auto record = app_->progress.get({.owner = key_, .id = *id});
     if (!record) {
         co_await send(failure(404, "upload progress not found"));
         co_return;
     }
-    auto admission = app_->limits.active(ip_);
+    auto admission = app_->limits.active(key_);
     if (const auto *error = std::get_if<ActiveError>(&admission)) {
         co_await send(failure(429, active_error(*error)));
         co_return;
@@ -1164,7 +1168,7 @@ awaitable<void> Session::offer() {
         co_await send(failure(415, "WebRTC requests require application/json"));
         co_return;
     }
-    if (!app_->limits.rate(ip_, false)) {
+    if (!app_->limits.rate(key_, false)) {
         co_await send(failure(429, "rate limit exceeded"));
         co_return;
     }
@@ -1241,7 +1245,7 @@ awaitable<void> Session::offer() {
     }
     if (cancel && cfg.rtc_experimental) {
         try {
-            co_await app_->rtc.cancel(ip_, attempt);
+            co_await app_->rtc.cancel(key_, attempt);
         } catch (const RtcFailure &error) {
             rejected = failure(error.status, error.what());
         }
@@ -1265,7 +1269,7 @@ awaitable<void> Session::offer() {
         std::optional<Json> answer;
         try {
             answer = co_await app_->rtc.offer(
-                ip_, attempt, cfg.rtc_local_test ? field("sdp").get<std::string>() : filtered->sdp,
+                key_, attempt, cfg.rtc_local_test ? field("sdp").get<std::string>() : filtered->sdp,
                 probe_only());
         } catch (const RtcFailure &error) {
             rejected = failure(error.status, error.what());

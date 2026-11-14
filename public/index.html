@@ -5055,6 +5055,9 @@
       }
     }
     let pickerNodes = nodes;
+    function nodeHost(base) {
+      try { return new URL(base).hostname; } catch { return ""; }
+    }
     function updateNodeButton() {
       $("nodeSelect").textContent = selectedNode.label;
       $("nodeSelect").dataset.nodeId = selectedNode.id;
@@ -5062,14 +5065,14 @@
     }
     function renderNodeChoices() {
       const needle = $("nodeSearch").value.trim().toLocaleLowerCase();
-      const visible = pickerNodes.filter(n => [n.label, n.id, n.base].some(v => String(v || "").toLocaleLowerCase().includes(needle)));
+      const visible = pickerNodes.filter(n => [n.label, n.id, nodeHost(n.base)].some(v => String(v || "").toLocaleLowerCase().includes(needle)));
       $("nodeChoices").replaceChildren();
       $("nodeCount").textContent = pickerNodes.length + (pickerNodes.length === 1 ? " server" : " servers");
       for (const node of visible) {
         const button = document.createElement("button"); button.type = "button"; button.className = "node-choice";
         button.dataset.nodeId = node.id; button.setAttribute("aria-pressed", String(node.id === selectedNode.id));
         const identity = document.createElement("span"), title = document.createElement("strong"), address = document.createElement("small"), kind = document.createElement("span");
-        title.textContent = node.label; address.textContent = node.base || "This server"; identity.append(title, address);
+        title.textContent = node.label; address.textContent = nodeHost(node.base) || "This server"; identity.append(title, address);
         kind.className = "node-kind"; kind.textContent = node.probeOnly || node.role === "probe" || node.id === "probe-only" ? "Probes only" : "Speed + probes";
         button.append(identity, kind);
         button.addEventListener("click", () => selectNode(node));

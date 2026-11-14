@@ -9,6 +9,11 @@ void require(bool value) {
 } // namespace
 int main() {
     using namespace speedtest;
+    require(limit_key("203.0.113.7") == "203.0.113.7");
+    require(limit_key("::ffff:203.0.113.7") == "203.0.113.7");
+    require(limit_key("2001:db8:1:2:aaaa:bbbb:cccc:dddd") == "2001:db8:1:2::/64");
+    require(limit_key("2001:db8:1:2::1") == limit_key("2001:db8:1:2:ffff::9"));
+    require(limit_key("2001:db8:1:3::1") != limit_key("2001:db8:1:2::1"));
     auto cfg = Config::from_environment(
         [](std::string_view) -> std::optional<std::string> { return std::nullopt; });
     cfg.max_active_global = 2;

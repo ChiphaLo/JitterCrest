@@ -1,10 +1,23 @@
 #include "speedtest/limits.hpp"
 #include <algorithm>
+#include <boost/asio/ip/address.hpp>
 #include <limits>
 #include <mutex>
 #include <utility>
 
 namespace speedtest {
+std::string limit_key(std::string_view ip) {
+    boost::system::error_code error;
+    const auto address = boost::asio::ip::make_address(ip, error);
+    if (error || address.is_v4())
+        return std::string(ip);
+    const auto v6 = address.to_v6();
+    if (v6.is_v4_mapped())
+        return boost::asio::ip::make_address_v4(boost::asio::ip::v4_mapped, v6).to_string();
+    auto bytes = v6.to_bytes();
+    std::fill(bytes.begin() + 8, bytes.end(), 0);
+    return boost::asio::ip::address_v6(bytes).to_string() + "/64";
+}
 std::uint64_t wall_time_ms() {
     const auto n = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch())

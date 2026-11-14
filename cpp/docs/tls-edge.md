@@ -38,7 +38,16 @@ single-stream upload rose from 66-69 Mbit/s to 141-154 Mbit/s.
   connection window.
 - Every stream is relayed to `SPEEDTEST_HOST:PORT` over HTTP/1.1. Bodies without
   `content-length` use chunked transfer; HEAD and status codes are preserved;
-  responses are streamed with at most 2 MiB buffered per stream.
+  responses are streamed.
+- Response bytes wait for the client's flow-control window, so a client that
+  stops reading cannot grow them without bound: at most 2 MiB per stream, 4 MiB
+  per connection (a stream with nothing buffered may still fetch one 256 KiB
+  read) and 96 MiB per process. A connection whose pending response data makes
+  no progress for 20 seconds is closed.
+- Per client address (IPv6 grouped by /64): at most 16 connections and 64
+  concurrent streams, each of which holds one local listener connection; a
+  connection carries at most 32 concurrent streams. Excess streams are refused
+  with `REFUSED_STREAM`.
 - Client-supplied `x-real-ip`, `x-forwarded-*`, `forwarded` and
   `x-speedtest-node` headers are dropped and replaced with the TLS peer address.
 - A reply that ends before its request body resets the remainder with
@@ -86,4 +95,4 @@ CTest `tls_http2_edge_relay` starts the HTTP server and the listener with a
 generated certificate and checks the advertised windows from raw SETTINGS and
 WINDOW_UPDATE frames, HTTP/2 negotiation, HEAD, status relay, replacement of
 spoofed client addresses, a 64 MiB streamed upload, a sized upload and a 32 MiB
-download.
+download, and refusal of a 17th concurrent connection from one address.

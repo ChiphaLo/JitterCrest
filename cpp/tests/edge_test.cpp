@@ -213,6 +213,23 @@ int main() {
             check(down.status == 200 && down.body.size() == 33554432U, "download");
             const auto missing = request(base + "/missing", cert, "GET");
             check(missing.status == 404, "relayed status");
+            asio::io_context client_io;
+            asio::ssl::context client_ctx(asio::ssl::context::tls_client);
+            std::vector<std::unique_ptr<asio::ssl::stream<Tcp::socket>>> held;
+            const auto open = [&] {
+                auto tls = std::make_unique<asio::ssl::stream<Tcp::socket>>(client_io, client_ctx);
+                const unsigned char alpn[] = {2, 'h', '2'};
+                SSL_set_alpn_protos(tls->native_handle(), alpn, sizeof alpn);
+                tls->lowest_layer().connect(
+                    Tcp::endpoint(asio::ip::make_address("127.0.0.1"), tls_port));
+                boost::system::error_code error;
+                tls->handshake(asio::ssl::stream_base::client, error);
+                held.push_back(std::move(tls));
+                return !error;
+            };
+            for (int i = 0; i < 16; ++i)
+                check(open(), "connection within the per-client limit");
+            check(!open(), "connection above the per-client limit is refused");
         } catch (...) {
             edge.stop();
             server.stop();

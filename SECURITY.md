@@ -16,6 +16,12 @@ Never trust arbitrary forwarded identities on a public listener. WebRTC requires
 validated public UDP/NAT/firewall settings and remote SDP filtering. Private-RTC
 flags are for isolated tests only.
 
+Per-client rate, concurrency and byte limits apply to an IPv4 address or to an
+IPv6 /64, since one IPv6 client normally controls the whole prefix. Streaming
+downloads stop writing at their deadline plus five seconds even when the client
+stops reading, which releases their active slot. Remove origins of retired nodes
+from every node's `ALLOWED_ORIGINS`.
+
 Keep the pinned C/C++ dependencies and explicit native patches under review.
 Repeat the separate ASan+UBSan and TSan suites after affected changes; do not mix
 incompatible sanitizers or suppress findings to obtain a green report. Current

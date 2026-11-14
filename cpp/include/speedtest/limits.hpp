@@ -9,6 +9,9 @@
 namespace speedtest {
 using Clock = std::chrono::steady_clock;
 [[nodiscard]] std::uint64_t wall_time_ms();
+// Per-client accounting key: an IPv4 address, or the /64 prefix of an IPv6
+// address because one IPv6 client normally controls a whole /64.
+[[nodiscard]] std::string limit_key(std::string_view ip);
 enum class RateKind { standard, cancel };
 struct RateOptions {
     std::uint32_t maximum;

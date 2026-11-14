@@ -1,5 +1,7 @@
 #include "speedtest/edge.hpp"
+#include "speedtest/limits.hpp"
 #include <algorithm>
+#include <atomic>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -35,9 +37,19 @@ using asio::use_awaitable;
 // request bytes per connection never exceed the connection window.
 constexpr std::int32_t stream_window = 32 << 20;
 constexpr std::int32_t connection_window = 64 << 20;
-constexpr std::uint32_t streams_max = 128;
+constexpr std::uint32_t streams_max = 32;
 constexpr std::size_t header_bytes_max = std::size_t{64} << 10;
+// Response bytes wait here until the client's HTTP/2 window accepts them. A
+// client that stops reading keeps them, so they are bounded per stream, per
+// connection and per process, and a connection that makes no progress on
+// pending response data is closed.
 constexpr std::size_t response_buffer_max = std::size_t{2} << 20;
+constexpr std::size_t connection_response_max = std::size_t{4} << 20;
+constexpr std::size_t edge_response_max = std::size_t{96} << 20;
+constexpr auto stall_limit = std::chrono::seconds(20);
+// Each stream holds one local listener connection.
+constexpr std::size_t connections_per_client = 16;
+constexpr std::size_t streams_per_client = 64;
 constexpr std::size_t backend_read_bytes = std::size_t{256} << 10;
 constexpr std::size_t write_batch_bytes = std::size_t{1} << 20;
 constexpr std::size_t socket_read_bytes = std::size_t{256} << 10;
@@ -131,17 +143,25 @@ struct Stream {
     bool upload_done{}, discard_upload{};
     std::deque<std::string> download;
     std::size_t download_at{}, download_bytes{};
-    bool download_done{}, responded{}, closed{};
+    bool download_done{}, responded{}, closed{}, waiting{};
     Tcp::socket backend;
     asio::steady_timer upload_ready, download_space;
 };
 
+// Shared by all connections from one client address (or IPv6 /64).
+struct ClientSlot {
+    std::size_t connections{}; // acceptor strand only
+    std::atomic<std::size_t> streams{};
+};
+
 struct Connection : std::enable_shared_from_this<Connection> {
     Connection(Tcp::socket socket, std::shared_ptr<ssl::context> context, Tcp::endpoint target,
-               const Config &cfg, std::function<void()> done)
+               const Config &cfg, std::shared_ptr<ClientSlot> client_slot,
+               std::shared_ptr<std::atomic<std::size_t>> edge_buffered, std::function<void()> done)
         : context_(std::move(context)), tls(std::move(socket)), target_(target),
           handshake_ms_(cfg.http_headers_ms), idle_ms_(cfg.http_keep_alive_ms),
-          write_ready(tls.get_executor()), timer(tls.get_executor()), done_(std::move(done)) {
+          write_ready(tls.get_executor()), timer(tls.get_executor()), stall(tls.get_executor()),
+          done_(std::move(done)), slot(std::move(client_slot)), total(std::move(edge_buffered)) {
         write_ready.expires_at(asio::steady_timer::time_point::max());
         auto address = tls.remote_endpoint().address();
         if (address.is_v6() && address.to_v6().is_v4_mapped())
@@ -173,8 +193,12 @@ struct Connection : std::enable_shared_from_this<Connection> {
     Tcp::socket tls;
     const Tcp::endpoint target_;
     const std::uint64_t handshake_ms_, idle_ms_;
-    asio::steady_timer write_ready, timer;
+    asio::steady_timer write_ready, timer, stall;
     std::function<void()> done_;
+    std::shared_ptr<ClientSlot> slot;
+    std::shared_ptr<std::atomic<std::size_t>> total;
+    std::size_t buffered{};
+    Clock::time_point progress{};
     std::string client;
     SSL *engine{};
     BIO *cipher_in{}, *cipher_out{};
@@ -217,11 +241,14 @@ struct Connection : std::enable_shared_from_this<Connection> {
         closing = true;
         for (auto &[id, stream] : streams) {
             static_cast<void>(id);
+            release(*stream);
             end_stream(*stream);
         }
+        slot->streams -= streams.size();
         streams.clear();
         Error ignored;
         timer.cancel();
+        stall.cancel();
         write_ready.cancel();
         static_cast<void>(tls.close(ignored));
     }
@@ -231,6 +258,37 @@ struct Connection : std::enable_shared_from_this<Connection> {
         static_cast<void>(stream.backend.close(ignored));
         stream.upload_ready.cancel();
         stream.download_space.cancel();
+    }
+    void hold(Stream &stream, std::size_t bytes) {
+        if (buffered == 0)
+            progress = Clock::now();
+        stream.download_bytes += bytes;
+        buffered += bytes;
+        *total += bytes;
+    }
+    void drop(Stream &stream, std::size_t bytes) {
+        stream.download_bytes -= bytes;
+        buffered -= bytes;
+        *total -= bytes;
+    }
+    void release(Stream &stream) {
+        drop(stream, stream.download_bytes);
+        stream.download.clear();
+        stream.download_at = 0;
+    }
+    void watch_stall() {
+        stall.expires_after(std::chrono::seconds(5));
+        stall.async_wait([weak = weak_from_this()](Error error) {
+            auto self = weak.lock();
+            if (!self || error || self->closing)
+                return;
+            if (self->buffered && Clock::now() - self->progress > stall_limit) {
+                log_event("tls_client_stalled");
+                self->close();
+                return;
+            }
+            self->watch_stall();
+        });
     }
     void arm_idle() {
         if (!streams.empty() || closing || terminating)
@@ -298,6 +356,7 @@ struct Connection : std::enable_shared_from_this<Connection> {
         co_await handshake(raw);
         timer.cancel();
         open_session();
+        watch_stall();
         asio::co_spawn(tls.get_executor(), writer(),
                        [self](const std::exception_ptr &) { self->close(); });
         arm_idle();
@@ -408,12 +467,20 @@ struct Connection : std::enable_shared_from_this<Connection> {
     static Connection &of(void *data) {
         return *static_cast<Connection *>(data);
     }
-    static int on_begin_headers(nghttp2_session *, const nghttp2_frame *frame, void *data) {
+    static int on_begin_headers(nghttp2_session *session, const nghttp2_frame *frame, void *data) {
         auto &conn = of(data);
-        if (frame->hd.type == NGHTTP2_HEADERS && frame->headers.cat == NGHTTP2_HCAT_REQUEST)
+        if (frame->hd.type == NGHTTP2_HEADERS && frame->headers.cat == NGHTTP2_HCAT_REQUEST) {
+            if (++conn.slot->streams > streams_per_client) {
+                --conn.slot->streams;
+                nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, frame->hd.stream_id,
+                                          NGHTTP2_REFUSED_STREAM);
+                conn.signal();
+                return 0;
+            }
             conn.streams.emplace(
                 frame->hd.stream_id,
                 std::make_shared<Stream>(frame->hd.stream_id, conn.tls.get_executor()));
+        }
         if (!conn.terminating)
             conn.timer.cancel();
         return 0;
@@ -496,8 +563,10 @@ struct Connection : std::enable_shared_from_this<Connection> {
             if (stream.unconsumed)
                 nghttp2_session_consume_connection(session, stream.unconsumed);
             stream.unconsumed = 0;
+            conn.release(stream);
             end_stream(stream);
             conn.streams.erase(it);
+            --conn.slot->streams;
         }
         conn.arm_idle();
         return 0;
@@ -514,7 +583,8 @@ struct Connection : std::enable_shared_from_this<Connection> {
     }
     static BodySize read_body(nghttp2_session *, std::int32_t, std::uint8_t *buffer,
                               std::size_t size, std::uint32_t *flags, nghttp2_data_source *source,
-                              void *) {
+                              void *data) {
+        auto &conn = of(data);
         auto &stream = *static_cast<Stream *>(source->ptr);
         std::size_t copied = 0;
         while (copied < size && !stream.download.empty()) {
@@ -528,9 +598,16 @@ struct Connection : std::enable_shared_from_this<Connection> {
                 stream.download_at = 0;
             }
         }
-        stream.download_bytes -= copied;
-        if (stream.download_bytes < response_buffer_max / 2)
+        if (copied) {
+            conn.drop(stream, copied);
+            conn.progress = Clock::now();
+        }
+        if (stream.waiting && stream.download_bytes < response_buffer_max / 2)
             stream.download_space.cancel();
+        if (conn.buffered < connection_response_max / 2)
+            for (const auto &[id, other] : conn.streams)
+                if (other->waiting)
+                    other->download_space.cancel();
         if (stream.download.empty() && stream.download_done)
             *flags |= NGHTTP2_DATA_FLAG_EOF;
         else if (copied == 0)
@@ -680,10 +757,20 @@ struct Connection : std::enable_shared_from_this<Connection> {
             co_return;
         std::vector<char> chunk(backend_read_bytes);
         while (!parser.is_done()) {
-            if (stream->download_bytes >= response_buffer_max) {
+            // A stream with nothing buffered may always fetch one chunk, so one
+            // unread stream cannot block its siblings on the same connection.
+            const bool stream_full = stream->download_bytes >= response_buffer_max;
+            const bool connection_full =
+                buffered >= connection_response_max && stream->download_bytes > 0;
+            if (stream_full || connection_full || *total >= edge_response_max) {
                 Error ignored;
+                // Process-wide pressure has no single owner to signal: re-check shortly.
+                if (!stream_full && !connection_full)
+                    stream->download_space.expires_after(std::chrono::milliseconds(10));
+                stream->waiting = true;
                 co_await stream->download_space.async_wait(
                     asio::redirect_error(use_awaitable, ignored));
+                stream->waiting = false;
                 stream->download_space.expires_at(asio::steady_timer::time_point::max());
                 if (stream->closed || closing)
                     co_return;
@@ -703,7 +790,7 @@ struct Connection : std::enable_shared_from_this<Connection> {
             const auto n = chunk.size() - message.body().size;
             if (n) {
                 stream->download.emplace_back(chunk.data(), n);
-                stream->download_bytes += n;
+                hold(*stream, n);
                 nghttp2_session_resume_data(session, stream->id);
                 signal();
             }
@@ -735,6 +822,9 @@ struct TlsEdge::Impl : std::enable_shared_from_this<TlsEdge::Impl> {
     std::array<FileStamp, 2> stamp;
     const Tcp::endpoint target;
     std::map<std::uint64_t, std::weak_ptr<Connection>> connections;
+    std::map<std::string, std::shared_ptr<ClientSlot>> clients;
+    const std::shared_ptr<std::atomic<std::size_t>> buffered =
+        std::make_shared<std::atomic<std::size_t>>(0);
     std::uint64_t next_id{};
     bool stopping{};
 
@@ -752,7 +842,19 @@ struct TlsEdge::Impl : std::enable_shared_from_this<TlsEdge::Impl> {
                 co_await pause.async_wait(asio::redirect_error(use_awaitable, error));
                 continue;
             }
-            if (connections.size() >= cfg.max_http_connections) {
+            const auto peer = socket.remote_endpoint(error);
+            if (error) {
+                static_cast<void>(socket.close(error));
+                continue;
+            }
+            const auto key = limit_key(peer.address().to_string());
+            auto &slot = clients[key];
+            if (!slot)
+                slot = std::make_shared<ClientSlot>();
+            if (connections.size() >= cfg.max_http_connections ||
+                slot->connections >= connections_per_client) {
+                if (slot->connections == 0)
+                    clients.erase(key);
                 static_cast<void>(socket.close(error));
                 continue;
             }
@@ -761,14 +863,22 @@ struct TlsEdge::Impl : std::enable_shared_from_this<TlsEdge::Impl> {
             std::shared_ptr<Connection> conn;
             try {
                 conn = std::make_shared<Connection>(
-                    std::move(socket), context, target, cfg, [weak = weak_from_this(), id] {
+                    std::move(socket), context, target, cfg, slot, buffered,
+                    [weak = weak_from_this(), id, key] {
                         if (auto edge = weak.lock())
-                            asio::dispatch(edge->acceptor.get_executor(),
-                                           [edge, id] { edge->connections.erase(id); });
+                            asio::dispatch(edge->acceptor.get_executor(), [edge, id, key] {
+                                edge->connections.erase(id);
+                                const auto it = edge->clients.find(key);
+                                if (it != edge->clients.end() && --it->second->connections == 0)
+                                    edge->clients.erase(it);
+                            });
                     });
             } catch (const boost::system::system_error &) {
+                if (slot->connections == 0)
+                    clients.erase(key);
                 continue;
             }
+            ++slot->connections;
             connections.emplace(id, conn);
             conn->start();
         }
