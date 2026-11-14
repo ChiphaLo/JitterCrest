@@ -35,8 +35,8 @@ its counters every 100 ms.
 v = \frac{8\,B\big([t_0+W,\ t_0+W+T)\big)}{10^{6}\,T}\ \ \mathrm{Mbit/s}
 ```
 
-$B(\cdot)$ is the number of payload bytes received in the interval and $T$ is in seconds.
-Times are in seconds. The chart samples the same counter every $\Delta = 100\ \mathrm{ms}$ and draws a 0.5 s
+$B(\cdot)$ is the number of payload bytes received in the interval; times are in seconds.
+The chart samples the same counter every $\Delta = 100\ \mathrm{ms}$ and draws a 0.5 s
 rolling mean weighted by each sample's overlap $o_i$ with the last 0.5 s:
 
 ```math
@@ -45,7 +45,7 @@ v_k = \frac{8\,\Delta B_k}{10^{6}\,\Delta t_k},\qquad
 ```
 
 The end-to-end rate also includes the warm-up:
-$v_{\mathrm{e2e}} = 8\,B_{\mathrm{total}} / \big(10^{6}\,(t_{\mathrm{end}} - t_0)\big)$.
+$v_{\mathrm{e2e}} = 8 B_{\mathrm{total}} / \big(10^{6} (t_{\mathrm{end}} - t_0)\big)$.
 Multi-stream runs add the bytes of all streams to one counter.
 
 ### RTT and jitter
@@ -73,7 +73,7 @@ reports min, mean, max, P95 and P99.
 
 ### Stability test
 
-The stability test runs the same paired probe at $R \in \{20, 60, 100, 200\}$ packets/s
+The stability test runs the same paired probe at $R \in \lbrace 20, 60, 100, 200 \rbrace$ packets/s
 for 10–60 s (default 100 packets/s for 10 s). With packet interval
 $\tau = 1000/R\ \mathrm{ms}$ and $N$ packets sent in one direction:
 
