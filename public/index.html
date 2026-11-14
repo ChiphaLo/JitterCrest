@@ -112,11 +112,10 @@
     .node-dialog-head button { background: #f0f2f7; color: #5c6676; min-width: 38px; padding: 6px; }
     #nodeSearch { width: 100%; margin: 20px 0 14px; padding: 12px; border: 1px solid #dce0e7; border-radius: 10px; font: inherit; }
     #nodeChoices { display: grid; gap: 8px; }
-    .node-choice { width: 100%; height: auto; min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: #263347; border: 1px solid #e8ebf1; border-radius: 12px; background: white; padding: 14px; }
+    .node-choice { width: 100%; height: auto; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: #263347; border: 1px solid #e8ebf1; border-radius: 12px; background: white; padding: 14px; }
     .node-choice[aria-pressed="true"] { background: #edf5ff; border-color: #85baff; }
     .node-choice > span:first-child { min-width: 0; }
     .node-choice strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
-    .node-choice small { display: block; color: #7d8797; font-weight: 400; font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }
     .node-kind { color: #6081a5; font-size: 11px; white-space: nowrap; border-radius: 20px; padding: 5px 8px; background: #f2f5f9; }
     .node-dialog-foot { margin-top: 18px; font-size: 12px; color: #7d8797; }
     .node-dialog-foot a { color: var(--blue); text-decoration: none; }
@@ -870,7 +869,7 @@
   </main>
   <dialog id="nodeDialog" aria-labelledby="nodeDialogTitle">
     <div class="node-dialog-head"><h2 id="nodeDialogTitle">Choose server</h2><button id="closeNodeDialog" type="button" aria-label="Close server picker">×</button></div>
-    <input id="nodeSearch" type="search" placeholder="Search name or address" aria-label="Search servers">
+    <input id="nodeSearch" type="search" placeholder="Search servers" aria-label="Search servers">
     <div id="nodeChoices" aria-label="Servers"></div>
     <div id="nodePickerNotice" role="status" aria-live="polite"></div>
     <div class="node-dialog-foot"><span id="nodeCount"></span><a href="/admin">Manage nodes ↗</a></div>
@@ -2649,7 +2648,8 @@
         const remote = report.get(selectedPair.remoteCandidateId) || null;
         const candidate = (side, stat) => {
           if (!stat) return side + " unknown";
-          const addr = stat.address || stat.ip || "?";
+          // The page does not display server addresses; the client's own stays visible.
+          const addr = side === "remote" ? "server" : stat.address || stat.ip || "?";
           const port = stat.port || "?";
           const protocol = stat.protocol || stat.relayProtocol || "?";
           const type = stat.candidateType || "?";
@@ -5055,9 +5055,6 @@
       }
     }
     let pickerNodes = nodes;
-    function nodeHost(base) {
-      try { return new URL(base).hostname; } catch { return ""; }
-    }
     function updateNodeButton() {
       $("nodeSelect").textContent = selectedNode.label;
       $("nodeSelect").dataset.nodeId = selectedNode.id;
@@ -5065,14 +5062,14 @@
     }
     function renderNodeChoices() {
       const needle = $("nodeSearch").value.trim().toLocaleLowerCase();
-      const visible = pickerNodes.filter(n => [n.label, n.id, nodeHost(n.base)].some(v => String(v || "").toLocaleLowerCase().includes(needle)));
+      const visible = pickerNodes.filter(n => [n.label, n.id].some(v => String(v || "").toLocaleLowerCase().includes(needle)));
       $("nodeChoices").replaceChildren();
       $("nodeCount").textContent = pickerNodes.length + (pickerNodes.length === 1 ? " server" : " servers");
       for (const node of visible) {
         const button = document.createElement("button"); button.type = "button"; button.className = "node-choice";
         button.dataset.nodeId = node.id; button.setAttribute("aria-pressed", String(node.id === selectedNode.id));
-        const identity = document.createElement("span"), title = document.createElement("strong"), address = document.createElement("small"), kind = document.createElement("span");
-        title.textContent = node.label; address.textContent = nodeHost(node.base) || "This server"; identity.append(title, address);
+        const identity = document.createElement("span"), title = document.createElement("strong"), kind = document.createElement("span");
+        title.textContent = node.label; identity.append(title);
         kind.className = "node-kind"; kind.textContent = node.probeOnly || node.role === "probe" || node.id === "probe-only" ? "Probes only" : "Speed + probes";
         button.append(identity, kind);
         button.addEventListener("click", () => selectNode(node));
