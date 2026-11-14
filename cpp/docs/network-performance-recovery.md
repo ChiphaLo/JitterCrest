@@ -1,15 +1,17 @@
 # Recovery-source snapshot: native Windows Internet HTTP comparison
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This distinct experiment used the source `019ff35` preserved-UI bundle and unchanged Rust UI reference on the same isolated server. It is not a relabeling of the older HK-to-JP report, a native RTC performance test, or a measurement of older artifacts.
 
 ## Matched profile
 
 - Native Windows Python standard-library HTTPS keepalive generator, concurrency 1/4, no browser/GPU. The existing OS routing/proxy policy was not altered.
-- Same independent Debian13 x86_64/glibc2.41 server and same copied Caddy, two-CPU affinity and matched transient systemd resource/hardening limits for both Release/ThinLTO backends. Production/co-tenants stayed running; not an exclusive-host experiment.
+- Same independent Debian 13 x86_64/glibc2.41 server and same copied Caddy, two-CPU affinity and matched transient systemd resource/hardening limits for both Release/ThinLTO backends. Production/co-tenants stayed running; not an exclusive-host experiment.
 - Three AB/BA/AB rounds; 1 MiB GET/POST plus bodyless latency; 0.5s warmup and 2s admission. Last admitted requests drain into goodput. Ordinary scoped-CA and IP verification remain enabled.
 - All **36 cases / 5,914 requests** passed with zero workload errors. Attempted application payload including warmup was **1616 MiB** under a fixed 2GiB limit; not exact wire/TLS bytes.
-- Source, workload and binary identities stayed frozen. Earlier source snapshots, including the separately excluded overlap run, remain retained. This new source019ff collection began only after the local timed benchmark job ended and had no overlapping builds/browser tests/local benchmarks.
-- Remote process CPU/RSS came from independent SSH snapshots. CPU ticks are10ms; resource intervals include coordination gaps and are not the exact client window. Windows generator CPU used process_time, including orchestration, rather than pretending to read Linux process counters locally.
+- Source, workload and binary identities stayed frozen. Earlier source snapshots, including the separately excluded overlap run, remain retained. This new source 019ff collection began only after the local timed benchmark job ended and had no overlapping builds/browser tests/local benchmarks.
+- Remote process CPU/RSS came from independent SSH snapshots. CPU ticks are 10ms; resource intervals include coordination gaps and are not the exact client window. Windows generator CPU used process_time, including orchestration, rather than pretending to read Linux process counters locally.
 
 ## Results
 

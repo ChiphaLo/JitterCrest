@@ -24,8 +24,8 @@ from every node's `ALLOWED_ORIGINS`.
 
 Keep the pinned C/C++ dependencies and explicit native patches under review.
 Repeat the separate ASan+UBSan and TSan suites after affected changes; do not mix
-incompatible sanitizers or suppress findings to obtain a green report. Current
-finite safety evidence and two explicitly triaged Clang18/Boost coroutine-model
+incompatible sanitizers or suppress findings to obtain a green report. Finite
+safety evidence and two explicitly triaged Clang 18/Boost coroutine-model
 findings are recorded in `cpp/docs/acceptance-audit.md` and
 `cpp/docs/coroutine-analysis.md`, not represented as proof of zero risk.
 

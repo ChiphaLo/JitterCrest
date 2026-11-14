@@ -125,6 +125,7 @@ For a main site with nodes, run `python3 cpp/deploy/quickstart.py`, then add nod
 
 ## Documentation
 
+- [Documentation index](cpp/docs/README.md)
 - [Build, deployment and node management](cpp/docs/deployment.md)
 - [C++ architecture and configuration](cpp/README.md)
 - [TLS HTTP/2 listener](cpp/docs/tls-edge.md)

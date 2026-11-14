@@ -1,4 +1,6 @@
-# Current configuration and native transport follow-up
+# Configuration and native transport follow-up
+
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
 
 **Subsequent follow-up:** `receive-fairness.md` records the bounded native
 OpenSSL receive-turn change and its new validation. The failed aggregate below
@@ -180,7 +182,7 @@ extension or reliable retransmission of zero-retry probes was introduced.
 Raw packets, keys and diagnostic tooling remain private, not in this repository.
 
 Changed configuration/RTC/fixture Tidy checks produced no new diagnostic. The
-full HTTP analysis still reports the same two audited Clang18/Boost coroutine
+full HTTP analysis still reports the same two audited Clang 18/Boost coroutine
 model findings in `coroutine-analysis.md`; it is not a clean full-service Tidy
 pass. Sanitizer runtime success does not erase static findings or demonstrate
 that every system dependency is source-instrumented. Public deployment-profile
@@ -264,11 +266,11 @@ Verification scopes are intentionally separated:
 
 - The negotiated-cap correction rebuilt Debug/Release/ASan+UBSan/TSan and passed
   eight CTests plus paired real negotiation in each. Release and both sanitizer
-  profiles also passed resource13, untraced close/recovery100, native wire22 and
-  shutdown3 suites. Those reports precede the subsequent read-boundary guard.
+  profiles also passed resource 13, untraced close/recovery100, native wire 22 and
+  shutdown 3 suites. Those reports precede the subsequent read-boundary guard.
 - After the additional read-boundary guard, all four profiles rebuilt and passed
-  eight CTests plus the full paired boundary fixture: valid65,535, close65,536,
-  reject65,537, unchanged real20pps×2s measurement and closed-attempt409 behavior.
+  eight CTests plus the full paired boundary fixture: valid 65,535, close 65,536,
+  reject 65,537, unchanged real 20pps×2s measurement and closed-attempt409 behavior.
   This is targeted validation of the final guard, not a relabeling of the earlier
   full runtime matrix as having been rerun on it.
 - `tests/frontend_statistics_contract.py` separately checked 510 golden inputs
@@ -287,7 +289,7 @@ python3 cpp/tests/frontend_statistics_contract.py \
   --output /private/evidence/frontend-statistics.json
 ```
 
-The previous fairness bundles, public8/8 profile and performance measurements are
+The previous fairness bundles, public 8/8 profile and performance measurements are
 still identified by their original hashes. They do not include this correction.
 New independent corrected UI/generic-UI/agent bundles have now passed
 [local build/relocation/native/UI checks](corrected-candidate-builds.md).

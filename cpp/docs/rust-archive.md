@@ -31,7 +31,7 @@ The source archive was pushed to main and its remote commit verified before
 any destructive server cleanup. Then, on all three hosts:
 
 - Stopped/disabled and removed the old Rust unit and drop-ins; its load state
-  is now `not-found`, with no listener on3010.
+  is now `not-found`, with no listener on 3010.
 - Removed Rust release directories/current links/state, Rust reference binary
   copies from inactive acceptance stages, old Rust deployment rollback materials,
   and the Rust backup archives/scripts from the initial C++ rollout.
@@ -51,9 +51,9 @@ any destructive server cleanup. Then, on all three hosts:
 These are summed removed file lengths, not free-space deltas or guaranteed
 physical-block reclamation; unrelated disk activity is not credited to cleanup.
 
-After deletion, the actual production three-node browser profile passed3/3:
-autoRTT, genuinely new offer/session/direction IDs on Restart,100pps x20s stability
-with the unchanged.99 gate and payload/progress checks on data-capable nodes.
+After deletion, the actual production three-node browser profile passed 3/3:
+auto RTT, genuinely new offer/session/direction IDs on Restart, 100pps × 20s stability
+with the unchanged 0.99 gate and payload/progress checks on data-capable nodes.
 Twenty-one public HTTP/TLS/CORS/payload/denial checks and five nonce-correlated
 browser-wire probe denials also passed. Normal certificate verification and GPU
 disabled headless mode were retained. C++ and proxy process identities did not
@@ -67,8 +67,8 @@ request. The active maintained source/build/CI remains C++ only.
 
 ## Archive validation scope
 
-Both root CMake Release builds (UI/agent) passed8 CTests each;27 Python tooling
-tests passed. All106 archived reference file hashes matched both working files
+Both root CMake Release builds (UI/agent) passed 8 CTests each; 27 Python tooling
+tests passed. All 106 archived reference file hashes matched both working files
 and staged/published Git content. Cargo metadata and the relocated optional GNU
 Rust oracle rebuild/three arithmetic smokes passed. The whole archived Rust
 server was not rebuilt in this archival change. C++ runtime/frontend sources were

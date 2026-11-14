@@ -18,9 +18,9 @@ names do not imply a Rust runtime dependency.
 ## Build and test
 
 Linux x86_64 is validated. Install CMake >=3.22, Ninja, a C++20 compiler (validated
-with Clang18), Boost.System1.83, OpenSSL3, libcurl>=7.85 with asynchronous DNS,
-libnghttp2>=1.59 with pkg-config, nlohmann-json>=3.11, Python3 and Git. The native transport bootstrap pins
-libdatachannel0.24.6 and applies the versioned dependency patches.
+with Clang 18), Boost.System 1.83, OpenSSL3, libcurl>=7.85 with asynchronous DNS,
+libnghttp2>=1.59 with pkg-config, nlohmann-json>=3.11, Python 3 and Git. The native transport bootstrap pins
+libdatachannel 0.24.6 and applies the versioned dependency patches.
 
 ```sh
 CC=clang-18 CXX=clang++-18 \
@@ -44,7 +44,7 @@ Debug, Release, ASan+UBSan and TSan presets in `cpp/` remain supported.
 Native RTC is explicitly enabled with `SPEEDTEST_RUST_RTC_EXPERIMENTAL=1` after
 configuring a real public IPv4 and validating UDP reachability. The legacy name
 is retained as a configuration key only; no Rust process is called. Without it,
-RTC requests fail closed503. `.env.example` is an environment-variable reference;
+RTC requests fail closed with 503. `.env.example` is an environment-variable reference;
 the executable does not automatically load dotenv files.
 
 ## Node management and command-based enrollment

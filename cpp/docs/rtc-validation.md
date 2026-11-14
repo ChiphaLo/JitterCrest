@@ -1,5 +1,7 @@
 # Native RTC milestone — in progress, not production acceptance
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 The C++ executable now independently negotiates and serves browser WebRTC over
 libdatachannel 0.24.6, pinned commit
 `6b1e2e620f1e37f0eafeee702eaea0043cb305fd`. It does not invoke a Rust process,

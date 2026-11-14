@@ -1,5 +1,7 @@
 # Authorized production rollout and Rust rollback
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 **Historical rollout record:** the later [Rust archival/retirement request](rust-archive.md)
 supersedes retention policy; do not infer current Rust availability from the
 initial deployment state below.
@@ -15,9 +17,9 @@ intervening commits contain documentation, not a different executable.
 - Three independently enabled C++ services: one central UI, one probe-only agent,
   one measurement-data agent. Agents embed/serve no webpage. Central frontend
   bytes and CSP match the retained Rust UI after normalizing only random nonces.
-- C++ runs on its own loopback port32132, release directory, journal identifier
+- C++ runs on its own loopback port 32132, release directory, journal identifier
   and hardened non-root systemd service. The existing Rust service remains active
-  on3010; its PID/start time/executable/unit hashes and release link are unchanged.
+  on 3010; its PID/start time/executable/unit hashes and release link are unchanged.
 - Only the speedtest proxy upstream dials changed. Adapted before/after Caddy JSON
   was compared structurally; unrelated routes/configuration files, proxy process,
   Rust units and historical archives were preserved. The actual live admin config
@@ -29,24 +31,24 @@ intervening commits contain documentation, not a different executable.
 - Previously verified, inactive acceptance extracts were promoted by same-filesystem
   rename, avoiding an extra full copy on the smallest host. All manifest files,
   executable hashes and actual bundled-library maps were checked again. Original
-  candidate/recovery archives remain retained; free space stayed above768MiB.
+  candidate/recovery archives remain retained; free space stayed above 768MiB.
 
 ## Actual post-cutover verification
 
 Native Windows headless Chromium, GPU disabled, ordinary certificate validation:
 
-| Role | autoRTT | Fresh-offer/session/direction-ID Restart | 100pps x20s stability | Upload/download density | Network loss up/down |
+| Role | auto RTT | Fresh-offer/session/direction-ID Restart | 100pps × 20s stability | Upload/download density | Network loss up/down |
 |---|---|---|---|---|---|
 | Central data/UI | passed | passed | passed | 1.0000 / 1.0000 | 0 / 0 |
 | Probe-only agent | passed | passed | passed | 0.9990 / 1.0000 | 0 / 0 |
 | Data agent | passed | passed | passed | 0.9995 / 1.0000 | 0 / 0 |
 
-The unchanged.99 completeness gate applied to2000 planned samples per direction;
+The unchanged 0.99 completeness gate applied to 2000 planned samples per direction;
 missing scheduled sends are not mislabeled network loss. Both data-capable nodes
-also passed10KiB/100KiB/1MiB downloads,1MiB upload and live upload-progress final
+also passed 10KiB/100KiB/1MiB downloads, 1MiB upload and live upload-progress final
 byte accounting. Five nonce-correlated **browser wire**404/CORS-preflight denial
 proofs verified the probe-only role; a fetch TypeError alone was not accepted as
-denial evidence. A separate21-case public HTTP/TLS/CORS/payload check covered the
+denial evidence. A separate 21-case public HTTP/TLS/CORS/payload check covered the
 existing domain/IP/8443 and retained HTTP entry points.
 
 Independent SSH verification checked actual runtime executable/library hashes,

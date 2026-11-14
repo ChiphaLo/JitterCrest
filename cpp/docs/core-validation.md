@@ -1,5 +1,7 @@
 # Core milestone validation — 2026-10-25
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 Scope: independent C++ protocol/statistics/SDP/control library, **not** a complete
 HTTP/WebRTC server. Production remains Rust. No production route/service was
 modified. Original Rust sources and shared frontend were checked unchanged by

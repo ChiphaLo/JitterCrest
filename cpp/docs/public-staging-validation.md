@@ -1,13 +1,15 @@
 # Guarded public staging — 2026-10-26, acceptance still incomplete
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This records actual isolated VPS runs, not loopback traffic or a serialized
 candidate-address fixture. **It is not a production cutover or full acceptance.**
 Original successes and failures are retained privately; later successes do not
 turn an earlier failed transaction into a pass.
 
 **Latest source profile:** [recovery release validation](recovery-release-validation.md)
-records newly built source019ff packages and a new native-Windows public8/8
-matrix, including fresh Restart session/test IDs,20 exact probe-denial proofs,
+records newly built source 019ff packages and a new native-Windows public 8/8
+matrix, including fresh Restart session/test IDs, 20 exact probe-denial proofs,
 full storage budgets and independent post-cleanup production checks. It does not
 relabel the older package hashes or failed traces below.
 
@@ -230,7 +232,7 @@ backend was two RTT-only pages and two pages with automatic RTT followed by
   controls for missing HTTP proof, wrong status/origin, an unexpected actual
   payload request, missing nonce and duplicate observations.
 
-`tests/probe_denial_contract.py` now distinguishes a returned HTTP404 from a
+`tests/probe_denial_contract.py` now distinguishes a returned HTTP 404 from a
 browser fetch rejection. A TypeError alone remains insufficient: TLS, network
 failure and CORS can all produce it. The helper requires independent exact
 request evidence rather than synthesizing a successful response object. Run

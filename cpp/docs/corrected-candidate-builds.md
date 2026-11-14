@@ -1,23 +1,25 @@
 # Boundary-corrected candidates — local validation
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 **Version scope:** these hashes predate the later
 [RTC admission/recovery correction](reference-admission-recovery.md).
 They must not be deployed or described as packages of that newer source.
-New source019ff packages and their separate current public checks are recorded
+New source 019ff packages and their separate current public checks are recorded
 in [recovery release validation](recovery-release-validation.md).
 
 Three independent Linux x86_64 candidates were built from public source commit
 `400078fd3bf3d0ceab5da4816eae57a9d0d5b8e6`, not by renaming older archives.
-That commit's runtime code includes the negotiated64KiB / native65535-byte
-read-boundary correction. It does **not** include the rejected64KiB send-buffer
+That commit's runtime code includes the negotiated 64KiB / native 65535-byte
+read-boundary correction. It does **not** include the rejected 64KiB send-buffer
 experiment. The [severe-outage result delay](send-queue-diagnostic.md) remains
 unresolved; these are **not production-ready releases**.
 
 ## Artifact identities
 
 Each role had its own fresh CMake/Ninja build, package directory and archive.
-Builds used Clang18, Release, comparable ThinLTO, the existing pinned/patched
-libdatachannel0.24.6 and its source/license material. Rust and frontend sources
+Builds used Clang 18, Release, comparable ThinLTO, the existing pinned/patched
+libdatachannel 0.24.6 and its source/license material. Rust and frontend sources
 were unchanged. The minimum glibc required by each bundled dependency set is
 **2.38**; the OS loader, resolver/NSS, CA store and kernel remain prerequisites.
 No aarch64 build/run is claimed.
@@ -32,13 +34,13 @@ The preserved UI uses the existing deployment frontend; the generic UI uses
 the public generic frontend; the agent embeds no webpage. Archives are retained
 locally, not committed to GitHub. Operational configuration, raw diagnostics
 and backups are not part of the public source update. Archive sizes are about
-70 MiB compressed and104–105 MiB expanded each, excluding staging copies of a
+70 MiB compressed and 104–105 MiB expanded each, excluding staging copies of a
 Rust reference, proxy, additional metadata and the required free-space reserve.
 
 ## Verified scope
 
 - **All three builds:** eight CTests each. Preserved UI and agent additionally
-  passed126 actual-process paired HTTP contracts against the corresponding
+  passed 126 actual-process paired HTTP contracts against the corresponding
   unchanged Rust UI/agent reference. Generic UI had eight actual configuration
   visibility cases; the preserved UI had sixteen paired visibility cases.
   A full generic-vs-private-UI HTML differential is not claimed.
@@ -46,17 +48,17 @@ Rust reference, proxy, additional metadata and the required free-space reserve.
   verify every manifest/SHA256SUMS entry and original executable identity,
   launch the packaged wrapper, and inspect actual process mappings. Every
   bundled library loaded from that relocated directory, not a development
-  prefix. Fixed10KiB/100KiB/1MiB download/upload and both upload-progress modes
-  passed there. Root HTML is200 for UI roles and404 for the no-UI agent.
+  prefix. Fixed 10KiB/100KiB/1MiB download/upload and both upload-progress modes
+  passed there. Root HTML is 200 for UI roles and 404 for the no-UI agent.
 - **All three relocated native transports:** paired real browser tests against
-  the matching Rust reference verified negotiated65536, valid65535 followed by
-  a successful20pps×2s measurement, close65536/tombstone409, and browser
-  rejection of65537 before transmission. Both fixtures explicitly permit the
-  legal65536-byte application-control ceiling for this boundary test; the
-  normal16384-byte application policy is unchanged.
-- **Both normal relocated webpages:** autoRTT and Restart completed without
+  the matching Rust reference verified negotiated 65536, valid 65535 followed by
+  a successful 20pps×2s measurement, close 65536/tombstone 409, and browser
+  rejection of 65537 before transmission. Both fixtures explicitly permit the
+  legal 65536-byte application-control ceiling for this boundary test; the
+  normal 16384-byte application policy is unchanged.
+- **Both normal relocated webpages:** auto RTT and Restart completed without
   frontend test hooks, route mocks or test-mode query parameters. A separate
-  strict check correlated a **new offer/attempt and200 response after Restart**,
+  strict check correlated a **new offer/attempt and 200 response after Restart**,
   observed the running phase, then waited for a new RTT completion. An old
   completed phase alone was not sufficient. Browser page errors were absent;
   Chromium ran headless with GPU disabled.
@@ -65,7 +67,7 @@ Rust reference, proxy, additional metadata and the required free-space reserve.
 
 These are local build/relocation/normal-UI results, not a rerun of every earlier
 sanitizer suite, fair benchmark or public multi-host role profile. The old
-fairness bundles and their public8/8 results retain their own hashes. A current
+fairness bundles and their public 8/8 results retain their own hashes. A current
 corrected-source public role matrix, the adverse-path decision and final
 objective audit remain pending. No main merge, remote deployment, production
 route/service change or Rust rollback modification was made by this work.

@@ -74,10 +74,9 @@ agent separately; do not set a developer library prefix to hide a broken bundle.
 
 Keep the **whole previous release directory** for rollback, not just its binary.
 Only update the independently owned current link and restart its own unit after
-validation. Rust stays production/rollback until conditional full acceptance,
-merge and production deployment gates pass.
+validation.
 
-## Measured packaging verification — 2026-10-26
+## Measured packaging verification — 2026-10-26 (historical)
 
 Fresh public-source Release/ThinLTO UI and no-UI builds both passed eight CTests.
 Both generated bundles were extracted into unrelated temporary directories;
@@ -98,5 +97,4 @@ deployment-frontend UI are described in
 [public-staging-validation.md](public-staging-validation.md); bounded Internet
 measurements are in [network-performance.md](network-performance.md). Those
 later checks do not change this local packaging experiment into production
-acceptance. Rust remains production and rollback, with unresolved probe-agent
-observations and the final acceptance audit preceding any conditional cutover.
+acceptance. Rust was later archived; see [rust-archive.md](rust-archive.md).

@@ -91,7 +91,7 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
          ▼                    ▼
     主节点或数据节点       主节点或探针节点
 
-网页由主节点提供，浏览器与选定的后端节点通信并在本地渲染结果；测速流量不必先经过主节点再转发。浏览器仍需访问节点的 HTTP(S) 接口进行测速和 WebRTC 信令，探针走 WebRTC 数据通道。**直接使用 IP 不等于自动获得可信 HTTPS**。
+网页由主节点提供，浏览器与选定的后端节点通信并在本地渲染结果；测速流量不经过主节点转发。浏览器访问节点的内置 TLS 入口进行测速和 WebRTC 信令，探针走 WebRTC 数据通道。**使用 IP 地址时，HTTPS 仍需要浏览器信任的 IP 证书**。
 
 | 角色 | 构建或配置 | 用途 |
 |---|---|---|
@@ -143,7 +143,7 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
     curl -fsS http://127.0.0.1:32132/health
     curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:32132/latency
 
-浏览器可打开 http://127.0.0.1:32132/ 查看网页。此步骤主要验证本机 HTTP 和网页；**默认未启用 WebRTC**，不能据此认为公网 UDP、证书或多节点探针已经通过。
+浏览器可打开 http://127.0.0.1:32132/ 查看网页。此步骤验证本机 HTTP 和网页；**默认未启用 WebRTC**，公网 UDP、证书和多节点探针需要另行验证。
 
 ### 构建无网页的后端节点
 
@@ -166,7 +166,7 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
 | PORT | HTTP 端口，代码默认 3010；上面的本机示例显式使用 32132。 |
 | SPEEDTEST_NODE_NAME | 当前节点名称。 |
 | SPEEDTEST_NODES | 主网页节点列表的 JSON 数组；默认只有同源本地节点。 |
-| SPEEDTEST_RUST_RTC_EXPERIMENTAL | 设为 1 才启用 WebRTC；这是历史配置键名，**不代表依赖 Rust**。默认关闭，相关请求返回 503。 |
+| SPEEDTEST_RUST_RTC_EXPERIMENTAL | 设为 1 才启用 WebRTC；这是沿用的历史键名，**运行时与 Rust 无关**。默认关闭，相关请求返回 503。 |
 | SPEEDTEST_WEBRTC_UDP4 | 按实际公网 IPv4／NAT 拓扑配置，并验证 UDP 连通性；不接受私有地址作为该公网映射。 |
 | ALLOWED_ORIGINS | 允许的跨源网页来源，按实际部署填写。 |
 | SPEEDTEST_ALLOW_CROSS_SITE | 跨站节点场景按需要设为 1，同时配置正确的来源和 CSP。 |
@@ -182,7 +182,7 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
 
 在**主节点**的环境配置中定义节点列表；以下域名是示意，必须替换为自己控制且证书有效的地址：
 
-    export SPEEDTEST_NODES='[{"id":"local","label":"主节点","base":""},{"id":"data-a","label":"数据节点 A","base":"https://data.example.com"},{"id":"probe-only","label":"探针节点","base":"https://probe.example.com"}]'
+    export SPEEDTEST_NODES='[{"id":"local","label":"主节点","base":"https://main.example.com:8444"},{"id":"data-a","label":"数据节点 A","base":"https://data.example.com:8444"},{"id":"probe-only","label":"探针节点","base":"https://probe.example.com:8444"}]'
 
 - 在各后端分别设置正确的 ALLOWED_ORIGINS、可信代理及跨站配置；主网页的内容安全策略也必须允许实际使用的节点来源。
 - 浏览器需要同时能访问 HTTP(S) 信令／测速接口和 WebRTC 的 UDP 路径；节点可能位于 NAT 后，需要按真实拓扑设置公网映射与防火墙。
@@ -206,12 +206,12 @@ IP 证书；NAT 环境需验证 UDP 及 ICE 连通性。浏览器直接连接各
 部署前建议：
 
 1. 本机完成构建和测试；确认目标机器的系统、架构、glibc 和动态库兼容。
-2. 使用独立低权限账户、受控监听地址、HTTPS 反向代理以及合理的连接／流量上限。
+2. 使用独立低权限账户、受控监听地址、页面前的 HTTPS 反向代理、测速节点的内置 TLS 入口，以及合理的连接／流量上限。
 3. 校验真实域名或 IP 的 TLS、CORS、NAT、UDP 和各节点角色；不要直接套用示例域名或私有生产配置。
 4. 准备并验证**当前 C++ 版本**的发布和回退方案，避免覆盖其他服务或现有数据。
 5. 不要提交 SSH 凭据、真实部署配置、令牌、生产日志或备份；公开版本使用通用占位配置。
 
-Rust 源码可供历史研究，但服务器端原 Rust 回滚服务和备份已按此前要求移除；不能把历史回滚命令当作当前可用方案。详见[安全说明](../../SECURITY.md)和 [Rust 归档说明](rust-archive.md)。
+Rust 源码仅供历史研究；服务器端原 Rust 回滚服务和备份已移除，历史文档中的回滚命令已失效。详见[安全说明](../../SECURITY.md)和 [Rust 归档说明](rust-archive.md)。
 
 ## API 概览
 
@@ -221,7 +221,7 @@ Rust 源码可供历史研究，但服务器端原 Rust 回滚服务和备份已
 | GET /latency | 轻量延迟请求 |
 | GET /download、GET /download-100k、GET /download-stream | 固定大小或流式下载 |
 | POST /upload、POST /upload-stream | 上传与服务端接收统计 |
-| /upload-progress | 上传进度创建与读取；具体方法／参数见实现及测试 |
+| /upload-progress | 上传接收计数会话：首字节后预热 1 s，统计 10 s 窗口，每 100 ms 以 NDJSON 回报 |
 | POST /webrtc/offer | WebRTC 信令；需显式启用 WebRTC |
 | GET /client-info | 客户端网络信息 |
 
@@ -231,8 +231,8 @@ Rust 源码可供历史研究，但服务器端原 Rust 回滚服务和备份已
 
 - 根目录 CMake 构建支持 UI 和无 UI 两种角色；cpp/ 下另有 Debug、Release、ASan+UBSan 和 TSan 预设。
 - 测试客户端覆盖协议、HTTP、资源边界、连接生命周期和 WebRTC 等场景；具体范围见[验收报告](acceptance-audit.md)。
-- 报告中有两项经分析的 Clang 18／Boost 协程模型静态分析告警；完整 HTTP 静态分析**不应称为零告警**。有限测试也不能证明不存在所有竞态或未定义行为。
-- 历史同环境基准中，Rust 在多项本地大流量吞吐／CPU 效率测试中领先；C++ 在部分轻量请求和高负载内存占用中有优势。不能由此推断任一语言在所有网络和负载下更快，详见[性能报告](performance-findings-recovery.md)。
+- 完整 HTTP 静态分析仍有两项经分析的 Clang 18／Boost 协程模型告警，详见[协程分析](coroutine-analysis.md)；竞态和未定义行为的检查范围以所列测试为限。
+- 历史同环境基准中，Rust 在多项本地大流量吞吐／CPU 效率测试中领先；C++ 在部分轻量请求和高负载内存占用中有优势。两者的优劣随网络和负载变化，详见[性能报告](performance-findings-recovery.md)。
 - 长时间稳定性、真实网络路径、客户端能力、证书签发和外部服务兼容性仍需针对自己的环境验证；Linux aarch64 不在已验证平台声明内。
 
 ## 目录结构

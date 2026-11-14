@@ -1,5 +1,7 @@
 # Real-network HTTP comparison — 2026-10-26
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This is a bounded Internet experiment between separate authorized client and
 server hosts, not loopback, a frontend screenshot, or a language-only benchmark.
 It completes the real-network HTTP measurement milestone, **not** full release

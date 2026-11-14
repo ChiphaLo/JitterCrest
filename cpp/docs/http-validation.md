@@ -1,5 +1,7 @@
 # Native HTTP milestone — 2026-10-25
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 Historical HTTP-only snapshot. Native RTC has since been implemented; see
 `rtc-validation.md` for subsequent evidence and still-open acceptance gates.
 Statements below about RTC not being implemented describe this earlier snapshot.
@@ -56,7 +58,7 @@ The ordinary shared suite has 126 comparisons: statuses, header values,
 10 KiB/100 KiB/1 MiB lengths, upload bytes/warmup fields, aliases, CORS/origin
 denials, progress lifecycle, invalid offers, malformed framing, ignored-body
 reuse, half-close recovery, 100-continue, pipelined socket limits, quotas,
-admission, trusted proxy behavior, CSP escaping and 128 requests at concurrency16.
+admission, trusted proxy behavior, CSP escaping and 128 requests at concurrency 16.
 
 The slow suite verifies eight lifecycle contracts: partial/silent initial header
 timeouts, incomplete offer-body timeout, keep-alive expiration, intermediate
@@ -115,8 +117,8 @@ environment loading occurs before workers start, and the service never mutates
 the environment. Other findings were addressed with explicit ownership, checks,
 named bounds/credits, observable cleanup errors and non-empty error handling.
 
-**The full network Clang-Tidy/analyzer gate has NOT passed.** Clang18 reports
-four diagnostics inside installed Boost1.83 Asio/Beast coroutine/parser internals:
+**The full network Clang-Tidy/analyzer gate has NOT passed.** Clang 18 reports
+four diagnostics inside installed Boost 1.83 Asio/Beast coroutine/parser internals:
 `awaitable.hpp:171`, `awaitable.hpp:508`, `basic_parser.ipp:187` and `:319`.
 They require further investigation of analyzer modeling versus a real defect;
 they are not silently suppressed, and no safety checker was disabled to obtain

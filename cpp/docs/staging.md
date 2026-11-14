@@ -1,5 +1,7 @@
 # Independent staging layout (template, not a deployment)
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 **Subsequent evidence:** guarded temporary units on three actual VPS hosts have
 now been exercised without changing the production Rust/Caddy units or routes.
 See `public-staging-validation.md` for actual checks, staged backout, preserved
@@ -66,8 +68,8 @@ available for these copies.
 `deploy/staging_capacity.py` is a pure, immutable byte-accounting helper; it
 does not connect, copy, remove, install or change services. Inputs must be
 nonnegative integer counts, not booleans/floats/NaN. It refuses to lower the
-16 MiB metadata margin or768 MiB retained reserve. Copy costs are added to that
-reserve rather than paid out of it. For example70+104+13+50 MiB in copies needs
+16 MiB metadata margin or 768 MiB retained reserve. Copy costs are added to that
+reserve rather than paid out of it. For example 70+104+13+50 MiB in copies needs
 1021 MiB free with the default margin/reserve; the older estimate could admit
 less than that. Recheck actual free space after copies, allowing for remaining
 metadata, and after preparing a stage. Concurrent external disk growth can
@@ -79,7 +81,7 @@ python3 cpp/tests/test_staging_capacity.py
 
 Eight unit tests, including invalid inputs and exact admission boundaries,
 passed on Windows and Linux. A separate **read-only** exercise of the actual
-private staging admission method found approximately907 MiB free versus1020 MiB
+private staging admission method found approximately 907 MiB free versus 1020 MiB
 required for the measured agent footprint and rejected admission. It created
 no remote directory, upload, unit or listener; the production snapshot was
 unchanged. The source archive used for this size calculation was an older

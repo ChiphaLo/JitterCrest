@@ -84,7 +84,8 @@ install -m 0640 -o root -g speedtest "$src/203.0.113.10.key" /etc/jittercrest/tl
 install -m 0640 -o root -g speedtest "$src/203.0.113.10.crt" /etc/jittercrest/tls/node.crt
 ```
 
-At multi-Gbit/s a 12-second single-stream upload exceeds the default 2 GiB
+At multi-Gbit/s an 11-second single-stream upload (1 s warm-up plus the 10 s
+measurement window) exceeds the default 2 GiB
 `MAX_STREAM_UPLOAD` and quickly exhausts the 4 GiB per-IP byte budgets; raise
 `MAX_STREAM_UPLOAD`, `UPLOAD_BYTE_BUDGET_PER_IP` and
 `DOWNLOAD_BYTE_BUDGET_PER_IP` to match the node's capacity.

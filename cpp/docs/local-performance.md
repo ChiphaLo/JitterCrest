@@ -1,5 +1,7 @@
 # Local Rust/C++ performance measurements
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 These are measured local profiles, not proof of universal language superiority or production readiness.
 
 ## Method and scope

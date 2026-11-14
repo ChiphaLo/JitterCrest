@@ -1,8 +1,10 @@
 # Reference-scale RTC admission and recovery correction
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 The application now initializes native SCTP with the reference's RTO values:
-initial3000ms, minimum1000ms and maximum60000ms. Its native send buffer is64KiB,
-alongside the existing64KiB per-channel application-queue threshold and bounded
+initial 3000ms, minimum 1000ms and maximum 60000ms. Its native send buffer is 64KiB,
+alongside the existing 64KiB per-channel application-queue threshold and bounded
 two-second admission wait. These settings are applied before native preload.
 
 The reference production pending queue has a128KiB semaphore budget. This is
@@ -11,30 +13,30 @@ and reference shared-queue byte accounting are identical. In particular, the
 two channel queues are distinct. The new buffer applies to **WebRTC SCTP only**,
 not the HTTP upload/download buffers or maximum throughput payloads.
 
-No128-byte field, probe schedule, maxRetransmits0, association retry budget,
+No 128-byte field, probe schedule, maxRetransmits=0, association retry budget,
 application/session/result deadline, statistics definition or .99 gate changed.
-The20-second frontend result sequence still has its original25-second window.
+The 20-second frontend result sequence still has its original 25-second window.
 Native retransmission timers are not an extension of that application window.
 Rust, its dependencies, frontend and production routes/services were not edited.
 
 ## Evidence and rejected alternatives
 
 Native header-only diagnostics on the prior configuration observed outgoing
-FORWARD-TSN attempts at about6.190,6.594,7.401,9.016,12.245,18.704 and28.800s
-after the first native ready-send. No incoming SACK was observed between20 and28s;
-the next was near28.923s. The result's first DATA output was near28.800s despite
+FORWARD-TSN attempts at about 6.190, 6.594, 7.401, 9.016, 12.245, 18.704 and 28.800s
+after the first native ready-send. No incoming SACK was observed between 20 and 28s;
+the next was near 28.923s. The result's first DATA output was near 28.800s despite
 earlier native admission. No binary DATA TSN was retransmitted. These are one
 controlled trace's header metadata, not decrypted application bodies or a
 universal network diagnosis. The trace and raw diagnostics stay private.
 
-Readback confirmed that the prior native RTO was1000/200/10000ms. Separate
-actual socket readback of both new variants confirmed3000/1000/60000ms and,
-respectively,1048576 or65536 send-buffer bytes. Real20pps×2s traffic completed
+Readback confirmed that the prior native RTO was 1000/200/10000ms. Separate
+actual socket readback of both new variants confirmed 3000/1000/60000ms and,
+respectively, 1048576 or 65536 send-buffer bytes. Real 20pps×2s traffic completed
 in both readback fixtures. Settings were not merely assumed applied.
 
 An older, pre-message-boundary full-RTO experiment had worsened a periodic-loss
 tail and was rejected. A corrected-source64KiB-only experiment also failed to
-fix the deadline. Those failures remain retained. A new fixed20-case schedule
+fix the deadline. Those failures remain retained. A new fixed 20-case schedule
 tested the corrected source's default, reference-RTO-only, combined settings
 and unchanged Rust. This was declared before traffic, without builds or other
 tests overlapping collection; no values were tuned after observing results.
@@ -52,16 +54,16 @@ RTO-only recovery was timely but still claimed a complete scheduler where Rust
 reported failure. The combined correction returned the same incomplete reason
 codes, `DOWNLOAD_SEND_FAILED` and `DOWNLOAD_SCHEDULER_INCOMPLETE`, in both
 blackout rounds, within the unchanged result window. Delay-only cases retained
-all2000 upload/download receipts. Eight additional fixed AB/BA periodic/burst
+all 2000 upload/download receipts. Eight additional fixed AB/BA periodic/burst
 cases also completed collection; all four combined-candidate results arrived
-within25s. Periodic loss is **not** a valid .99-density frontend measurement,
+within 25s. Periodic loss is **not** a valid .99-density frontend measurement,
 and no loss case is relabeled healthy merely because its server returned.
 
 These matched policies are not packet-identical traffic, Internet benchmarks
 or proof of universal timing equivalence. The public recovery regression uses
-real encrypted loopback transport with60ms one-way delay and a6–20s upstream
+real encrypted loopback transport with 60ms one-way delay and a6–20s upstream
 application-datagram blackout. It requires a timely **incomplete** result, not
-a valid completed stability test. Its healthy20pps×2s branch requires all40
+a valid completed stability test. Its healthy 20pps×2s branch requires all 40
 receipts. The original executable failed exactly its C++ blackout deadline
 check; the unchanged Rust counterpart passed. Both observations are retained.
 
@@ -85,20 +87,20 @@ read guard and combined settings, not a relabeling of the older cap-only runs.
 | tsan | 8 | 521 | 16 | yes | 126 | 13 | 100 | 22 | 3 | 4 |
 | debug | 8 | 521 | 16 | yes | — | — | — | — | — | — |
 
-The message fixture covers negotiated65536, valid65535 plus real measurement,
-close65536/tombstone409 and browser rejection of65537, with an explicit legal
+The message fixture covers negotiated 65536, valid 65535 plus real measurement,
+close 65536/tombstone 409 and browser rejection of 65537, with an explicit legal
 65536 application-control ceiling in both fixtures. Default control policy
-remains16384. Sanitizer suites used their separate instrumented C++ and native
+remains 16384. Sanitizer suites used their separate instrumented C++ and native
 builds with halt-on-error; ASan also checked leaks. These finite results do not
 prove absence of every race/UB, and system OpenSSL/libcurl are not claimed fully
 source-instrumented. Scoped RTC Clang-Tidy and clang-format passed; the two
-previous full-HTTP Clang18/Boost model findings remain explicitly nonzero and
+previous full-HTTP Clang 18/Boost model findings remain explicitly nonzero and
 audited, not silently suppressed or declared clean. Core/parser sources were
-unchanged; the earlier finite20000-run core fuzz scope is not expanded here.
+unchanged; the earlier finite 20000-run core fuzz scope is not expanded here.
 
 The source is not yet a current production release. Earlier boundary-candidate
 hashes predate these settings. New independent packages and a fresh current-source
-public4-combination/8-case profile have subsequently passed; see
+public 4-combination/8-case profile have subsequently passed; see
 [release validation](recovery-release-validation.md). Current performance
 revalidation, final objective audit and conditional deployment with Rust rollback
 remain pending. No main merge or production cutover was performed.

@@ -90,6 +90,7 @@ SPEEDTEST_HOST=127.0.0.1 PORT=32132 build/cpp/speedtest-cpp
 
 ## 文档
 
+- [文档索引](cpp/docs/README.md)
 - [构建、部署与节点管理](cpp/docs/deployment.zh-CN.md)
 - [C++ 架构与配置](cpp/README.md)
 - [TLS HTTP/2 入口](cpp/docs/tls-edge.md)

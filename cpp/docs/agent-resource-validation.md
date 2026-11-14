@@ -1,5 +1,7 @@
 # Independent-agent TLS and resource validation — 2026-10-26
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This is a scoped acceptance milestone, not full objective completion or a
 production cutover. Runtime sources, protocol, frontend and production remain
 unchanged. The new work is shared actual-process/browser tests and evidence.

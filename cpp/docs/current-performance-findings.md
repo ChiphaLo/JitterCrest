@@ -1,5 +1,7 @@
 # Receive-fairness snapshot performance findings
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This revalidation measured the current `cd514ed` runtime source, independently
 built from the sanitized public checkout with Release/ThinLTO and the current
 patched native dependency. It does not rename the earlier frozen benchmark

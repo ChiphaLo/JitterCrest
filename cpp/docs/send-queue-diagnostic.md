@@ -1,5 +1,7 @@
 # Post-boundary-fix SCTP queue diagnostic — unresolved
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This finite local diagnostic tests the message-boundary correction at
 `de82799d44d328302daab5b6fc4b77330efb58ae`. It is **not** frontend acceptance,
 an Internet benchmark, a performance ranking, or permission to deploy.
@@ -57,7 +59,7 @@ result protocol.
 
 Delay-only cases had all 2,000 upload and download receipts. Periodic/burst
 cases returned server `complete:true`, **not** proof of frontend acceptance.
-Periodic loss may fail the unchanged .99 density gate. Neither density,
+Periodic loss may fail the unchanged 0.99 density gate. Neither density,
 receipt accounting, counts, result deadlines, zero-retransmission reliability,
 RTOs nor association retry budgets were modified.
 
@@ -120,5 +122,5 @@ At this diagnostic milestone, timely truthful result handling remained
 unresolved. The subsequent correction above addresses the recorded controlled
 case without phantom send counts, relaxed density/deadline checks or a Rust
 semantic change. New packages and public role checks of that newer source
-remain required. Older public8/8 and benchmark artifacts retain their original
+remain required. Older public 8/8 and benchmark artifacts retain their original
 pre-correction identities.

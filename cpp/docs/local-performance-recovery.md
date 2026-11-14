@@ -1,8 +1,10 @@
 # Recovery-source Rust/C++ local performance measurements
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 These are measured local profiles, not proof of universal language superiority or production readiness.
 
-Runtime source: `019ff35821f974d80ab223e0fed4f19f7b01a6fb`. Fresh public-source Release/ThinLTO build passed CTest8 and paired HTTP126 before timing. Independent post-run checks verified unchanged source, binary, workload and native-library hashes, identical measured/packaged application text, and all86 protected baseline files. Earlier reports remain versioned, not relabeled.
+Runtime source: `019ff35821f974d80ab223e0fed4f19f7b01a6fb`. Fresh public-source Release/ThinLTO build passed 8 CTests and paired HTTP 126 before timing. Independent post-run checks verified unchanged source, binary, workload and native-library hashes, identical measured/packaged application text, and all 86 protected baseline files. Earlier reports remain versioned, not relabeled.
 
 Collection: 40 core rows, 168 HTTP rows / **15,292,678 requests**, two 300-second soak rows / **2,305,566 requests**, zero HTTP/soak workload errors.
 

@@ -1,5 +1,7 @@
 # Local performance findings — 2026-10-26
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 Full measured tables, min/max ranges, CPU cost, client utilization, RSS and binary
 hashes are in [local-performance.md](local-performance.md). Reproduction commands
 and caveats are in [../benchmarks/README.md](../benchmarks/README.md).

@@ -1,5 +1,9 @@
 # Reproducible local benchmarks
 
+These tools compare two server builds. The second endpoint in the Rust/C++
+examples is an explicitly built archived Rust binary from `archive/rust/`; neither the
+benchmarks nor the archived build are part of CTest, CI or deployment.
+
 ## Real-network client
 
 `network_benchmark.py` is a bounded Python standard-library HTTPS load client

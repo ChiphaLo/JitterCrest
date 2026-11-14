@@ -1,5 +1,7 @@
 # Native RTC resource limits and remote-close regression
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This is a scoped acceptance milestone, not permission to replace production.
 Rust, the shared frontend, existing Caddy/systemd configuration and backups
 remain unchanged. Public-NAT connectivity, real-network comparisons and final

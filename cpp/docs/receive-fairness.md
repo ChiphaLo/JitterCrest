@@ -1,5 +1,7 @@
 # Bounded OpenSSL receive executor turns
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 This follow-up changes native transport scheduling, not the probe protocol,
 measurement/statistics, test requirements or production routing. Earlier failed
 runs in `transport-compatibility.md` remain failed evidence for their original

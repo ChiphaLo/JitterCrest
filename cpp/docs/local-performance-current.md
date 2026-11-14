@@ -1,5 +1,7 @@
 # Receive-fairness snapshot: local Rust/C++ performance measurements
 
+> **Historical record.** This report describes the source, environment and policy of its own date during the October 2026 migration. Rust has since been archived and C++ is the only maintained backend; see the [documentation index](README.md) for current guides.
+
 Measured on 2026-10-26 from current runtime source cd514ed (source checkout 7965744). These are fresh reports, not renamed historical measurements. The independent measured ELF and packaged UI ELF have identical application .text bytes; complete ELF hashes differ with link/runtime paths. Native library prefixes have separate recorded identities and the same reproduced patches; their raw bytes are not claimed identical.
 
 This pinned snapshot precedes the later native message-cap correction. RTC was
