@@ -1,10 +1,42 @@
 # JitterCrest
 
+[![CI](https://github.com/ChiphaLo/JitterCrest/actions/workflows/ci.yml/badge.svg)](https://github.com/ChiphaLo/JitterCrest/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)
+
 [简体中文](README.zh-CN.md) | English
 
 JitterCrest is a self-hosted network quality tool. One main site serves the web page;
 measurement nodes exchange traffic with the browser directly and report speed, RTT,
 jitter, packet loss and stability.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.png">
+  <img src="docs/screenshots/overview-light.png" alt="JitterCrest results page: WebRTC RTT and jitter, small-object throughput, download and upload charts">
+</picture>
+
+## Interface
+
+<table>
+  <tr>
+    <td width="70%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/stability-dark.png">
+        <img src="docs/screenshots/stability-light.png" alt="Game stability analysis with lag-spike and loss-burst detectors for both directions">
+      </picture>
+    </td>
+    <td width="30%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mobile-dark.png">
+        <img src="docs/screenshots/mobile-light.png" alt="Speed test results on a phone">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">Game stability analysis</td>
+    <td align="center">Mobile</td>
+  </tr>
+</table>
+
+<sub>Screenshots from a local node, with the browser throttled to 500/100 Mbit/s for the speed test.</sub>
 
 ## Technology
 

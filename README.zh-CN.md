@@ -1,8 +1,40 @@
 # JitterCrest
 
+[![CI](https://github.com/ChiphaLo/JitterCrest/actions/workflows/ci.yml/badge.svg)](https://github.com/ChiphaLo/JitterCrest/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)
+
 [English](README.md) | 简体中文
 
 JitterCrest 是一个自托管的网络质量测试工具。主站负责提供网页，测速节点与浏览器直接交换数据，测量速度、RTT、抖动、丢包和稳定性。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.png">
+  <img src="docs/screenshots/overview-light.png" alt="JitterCrest 结果页：WebRTC RTT 与抖动、小对象吞吐、上下行速度曲线">
+</picture>
+
+## 界面预览
+
+<table>
+  <tr>
+    <td width="70%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/stability-dark.png">
+        <img src="docs/screenshots/stability-light.png" alt="游戏稳定性分析：上下行的卡顿尖峰与丢包突发检测">
+      </picture>
+    </td>
+    <td width="30%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mobile-dark.png">
+        <img src="docs/screenshots/mobile-light.png" alt="手机上的测速结果">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">游戏稳定性分析</td>
+    <td align="center">移动端</td>
+  </tr>
+</table>
+
+<sub>截图来自本地节点，测速时浏览器限速为 500/100 Mbit/s。</sub>
 
 ## 技术栈
 
